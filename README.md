@@ -5,6 +5,23 @@ The European Union is committed to achieving ambitious area-based conservation a
 
 ### Code structure
 
+All code used to format input data and run prioritization analysis is available in the `/scripts/problem-setup/` folder:
+
++ __`1-PU-globiom.R`:__ Sets up planning units and calculates initial land use proportions
++ __`2-zones.R` :__ Sets up 25 management zones and planning unit level constraints for each zone
++ __`3-features-updated.R` & `3b-feature-targets-disaggregated.R`:__ formats zone contributions to feature targets and sets disaggregated feature targets (by country-biome-spp)
++ __`4-linear-constraints-*.R`:__ sets constraints across nuts2 regions for f455 and BAU scenarios to ensure production targets are met at subnational scales ("linear constraints"). `
++ __`5-__
++ __`6-__
+
+In this analysis, we use Gurobi v 9.5 to solve optimization solutions (a proprietary LP solver, offering free academic licenses). However, it is possible to solve these problems with an open-source solver (more information on prioritzr-supported solvers and their benchmarks ![here](https://prioritizr.net/articles/solver_benchmarks.html))
+
 ### Data availability
+
+All formatted data to create the optimization solutions presented in the paper (`/scripts/problem-setup/5-...R`) is available in the `/data-formatted/` folder. 
+
+Underlying data is available at _create zonodo_
+
+
 
 
