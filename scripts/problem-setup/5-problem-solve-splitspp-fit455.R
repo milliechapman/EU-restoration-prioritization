@@ -1,18 +1,23 @@
 # formulate problem with all the pu and feature data
 # work in progress!
-library(prioritizr)
+library(prioritizr) # remotes::install_github("cboettig/prioritizr")
 library(fst)
-library(gurobi)
+#library(cplexAPI)
+library(rcbc)
+#library(highs)
+# library(gurobi)
 library(tidyverse)
-rm(list = ls())
+library(sf)
+# rm(list = ls())
 
-cores <- 7
+fs::dir_create("data/sol")
+cores <- parallel::detectCores()
 fst::threads_fst(nr_of_threads = cores, reset_after_fork = NULL)  # Set number for fst
 
 ########## function to set up, solve, and save solution #################
 
 problem_setup <- function(
-    cores = 7,
+    cores = parallel::detectCores(),
     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
     pu, # pu data (x from p)
     targs,
@@ -43,8 +48,10 @@ problem_setup <- function(
   p_solve <- p |>
     add_proportion_decisions() |>
     add_manual_targets(targs_filtered) |>
-    add_gurobi_solver(gap = 0.2, threads = cores, numeric_focus = FALSE,
-                      verbose = TRUE) |>
+#    add_cplex_solver(gap=0.2, threads = cores, time_limit = 60*60*12) |>
+#   add_highs_solver(gap=0.2, threads = cores, time_limit = 60*60*12) |>
+   add_cbc_solver(gap=0.2, threads = cores, time_limit = 60*60*12) |>
+#    add_gurobi_solver(gap = 0.2, threads = cores, numeric_focus = FALSE,  verbose = TRUE) |>
     add_manual_bounded_constraints(manual_bounded_constraints) |>
     add_feature_weights(features_weighted)
 
@@ -415,14 +422,14 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       as.matrix() |>
       replace_na(0)
 
-    #threshold = nuts_wetland$wetlandarea[[1]]/10
 
     p <- p |>
       add_linear_constraints(threshold = nuts_wetland$wetlandarea[[1]]/10,
                              sense = "<=",
                              data = wetland_budget)
-    print(nuts2)
-    print(threshold)
+    #print(nuts2)
+    #threshold = nuts_wetland$wetlandarea[[1]]/10
+#    print(threshold)
   }
   else(p <- p |>
          add_linear_constraints(threshold = 0,
@@ -457,7 +464,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
                              sense = ">=",
                              data = crop_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no crop low constraint"))
 }
@@ -489,7 +496,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
                              sense = ">=",
                              data = crop_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no crop med constraint"))
 }
@@ -519,7 +526,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
                              sense = ">=",
                              data = crop_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no crop high constraint"))
 }
@@ -552,7 +559,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
                              sense = ">=",
                              data = pasture_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no pasture low constraint"))
 }
@@ -584,7 +591,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
                              sense = ">=",
                              data = pasture_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no pasture high constraint"))
 }
@@ -616,7 +623,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = forest_threshold,
                              sense = ">=",
                              data = forest_budget)
-    print(nuts2)
+    #print(nuts2)
   }
   else(print("no forest multi constraint"))
 }
@@ -647,7 +654,7 @@ for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       add_linear_constraints(threshold = forest_threshold,
                              sense = ">=",
                              data = forest_budget)
-    print(nuts2)
+    #print(nuts2)
 
   }
   else(print("no forest prod constraint"))
@@ -664,7 +671,7 @@ scenarios <-
 
 for (i in 2:nrow(scenarios)){ #nrow(scenarios)){
   problem_setup(
-    cores = 7,
+    cores = parallel::detectCores(),
     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
     pu, # pu data (x from p)
     targs,
