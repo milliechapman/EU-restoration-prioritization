@@ -15,7 +15,7 @@ All code used to format input data and run prioritization analysis is available 
 + __`5b-format-solutions.R`:__ takes the outputs from the `problem-solve` scripts and calculates feature shortfalls, formats solutions as rasters, etc.
 + __`6-figures.R`:__ makes all figures panels used in manuscript
 
-In this code, we rely on ![Gurobi v 9.5](https://www.gurobi.com/) to solve optimization solutions (a proprietary LP solver, offers free academic licenses). However, it is possible to solve these problems with alternative open-source solvers (more information on supported solvers and their benchmarks ![here](https://prioritizr.net/articles/solver_benchmarks.html)
+In this code, we rely on [Gurobi v 9.5](https://www.gurobi.com/) to solve optimization solutions (a proprietary LP solver, offers free academic licenses). However, it is possible to solve these problems with alternative open-source solvers (more information on supported solvers and their benchmarks [here](https://prioritizr.net/articles/solver_benchmarks.html))
 
 ### Data availability
 
