@@ -10,7 +10,7 @@ All code used to format input data and run prioritization analysis is available 
 + __`1-PU-globiom.R`:__ Sets up planning units and calculates initial land use proportions
 + __`2-zones.R` :__ Sets up 25 management zones and planning unit level constraints for each zone
 + __`3-features-updated.R` & `3b-feature-targets-disaggregated.R`:__ formats zone contributions to feature targets and sets disaggregated feature targets (by country-biome-spp)
-+ __`4-linear-constraints-*.R`:__ sets constraints across nuts2 regions for f455 and BAU scenarios to ensure production targets are met at subnational scales ("linear constraints"). `
++ __`4-linear-constraints-*.R`:__ sets constraints across nuts2 regions for f455 and BAU scenarios to ensure production targets are met at subnational scales ("linear constraints"). Due to some discrepancies in underlying data (and issues emerging from the decision unit scale), we adjust some production targets in small subnational jurisdictions to ensure feasibility to full extent possible without restoration target (see  __`4b-nuts2-infeasibility-*.R`__, for subnational solves and adjustments under different future production scenarios).
 + __`5-problem-solve-splitspp-*.R`:__ run spatial optimization problem for all scenarios. Scripts are split by future productions scenarios (Fit455 and Reference/BAU) and a separate script is used for the restoration-only scenarios (shown in Figure S3)
 + __`5b-format-solutions.R`:__ takes the outputs from the `problem-solve` scripts and calculates feature shortfalls, formats solutions as rasters, etc.
 + __`6-figures.R`:__ makes all figures panels used in manuscript
