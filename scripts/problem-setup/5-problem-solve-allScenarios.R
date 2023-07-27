@@ -51,7 +51,7 @@ problem_setup <- function(
       add_proportion_decisions() |>
       add_manual_targets(targs_filtered) |>
       add_highs_solver(gap = 0.2, threads = cores,
-                       verbose = TRUE) |>
+                       verbose = TRUE, time_limit = 3600) |>
       add_manual_bounded_constraints(manual_bounded_constraints) |>
       add_feature_weights(features_weighted)
   }
@@ -961,6 +961,7 @@ iter <- function(i) {
     solver = "highs")
 }
 
+## plan and run scenarios
 plan(multicore, workers = 6) # see ?future::plan, for other options
 
 1:nrow(scenarios) %>%
