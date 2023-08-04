@@ -10,6 +10,10 @@ library(furrr)
 
 rm(list = ls())
 
+# Apply initial globiom corrections. This loads in different files corrected for initialGLOBIOM conditions
+# Default should be FALSE
+apply_initialglobiom <- TRUE
+
 cores <- 7
 fst::threads_fst(nr_of_threads = cores, reset_after_fork = NULL)  # Set number for fst
 
@@ -730,16 +734,16 @@ problem_setup <- function(
 
 ######### load in and some minor formating of data ################
 
-pu_in_EU <- read_csv("data-formatted/pu_in_EU.csv")
+pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
-pu <- read_fst("data-formatted/pu_data.fst") |>
+pu <- read_fst("data/formatted-data/pu_data.fst") |>
   left_join(pu_in_EU) |>
   rename(id = EU_id) |>
   dplyr::select(-c(pu, nuts2id)) |>
   drop_na(id)
 
 
-rij <- read_fst("data-formatted/features_split.fst") |>
+rij <- read_fst("data/formatted-data/features_split.fst") |>
   rename(species = feature) |>
   #mutate(amount = round(amount)) |>
   left_join(pu_in_EU) |>
@@ -771,7 +775,7 @@ feat <-feat_rij |>
   drop_na(name)
 
 # ZONES
-z <- read_csv("data-formatted/zone_id.csv") |>
+z <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id)) |>
   relocate(id, 1) |>
   dplyr::select(-zone)
@@ -789,7 +793,7 @@ nuts2_names <- nuts2_all$NUTS_ID
 # BOUNDED CONSTRAINTS
 # # zone ids for this..
 
-zones <- read_csv("data-formatted/zone_id.csv") |>
+zones <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id))
 
 # FEATURE TARGETS
@@ -805,7 +809,12 @@ names$speciesname <- sub(" ", "_", names$speciesname)
 # <4% mismatch between the features we have in the rij table and the features
 # we have targets for (due to small outstanding mismatches in spp names)
 
-targs_existing <- read_csv("data-formatted/targets_split.csv") |>
+if(apply_initialglobiom){
+  of <- "data/formatted-data/targets_split_initialGLOBIOM.csv"
+} else {
+  of <- "data/formatted-data/targets_split.csv"
+}
+targs_existing <- read_csv(of) |>
   mutate(zone = list(z$name)) |>
   #dplyr::filter(feature %in% feat$name) |>
   mutate(target = ifelse(target > 100000, target/100, target),
@@ -837,10 +846,15 @@ targs <- targs |> left_join(targs_rm) |>
   dplyr::select(-remove)
 
 # all the constraints
-
-manual_bounded_constraints <- read_csv("data-formatted/manual_bounded_constraints_production_globiom_flex.csv") |>
+if(apply_initialglobiom){
+  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_flex_initialGLOBIOM.csv"
+} else {
+  of <- "data-formatted/manual_bounded_constraints_production_globiom_flex.csv"
+}
+manual_bounded_constraints <- read_csv(of) |>
   left_join(zones) |>
-  dplyr::select(-c(zone, nuts2id)) |>
+  dplyr::select(-zone) |> dplyr::rename(pu = PUID) |>
+  # dplyr::select(-c(zone, nuts2id)) |>
   rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper) |>
   drop_na() |>
@@ -851,6 +865,13 @@ manual_bounded_constraints <- read_csv("data-formatted/manual_bounded_constraint
   mutate(lower = ifelse(zone == "z5", 0, lower)) |>
   mutate(upper = ifelse(zone == "z5", 0, upper))
 
+# Checks
+if(max(rij$pu) != max(manual_bounded_constraints$pu)){
+  manual_bounded_constraints <- manual_bounded_constraints |>
+    dplyr::filter(pu %in% pu_in_EU$pu) |>
+
+  assertthat::assert_that()
+}
 # all the constraints
 
 pu_cropland_low_budget_data <- read_csv("data-formatted/linear_constraints/pu_crop_low_budget_data_55.csv")
@@ -930,7 +951,8 @@ p <- problem(x = pu,
 ### solve ######
 scenarios <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.2,0.3,seq(0,2, by = 0.5)),
+    # carbon_weight = c(0.1,0.2,0.3,seq(0,2, by = 0.5)),
+    carbon_weight = c(0.5),
     country_constraints = c("EVEN", "FLEX", "UNCONSTRAINED"),
     restoration_constraint = 0.141,
     restoration_scenario = c("Baseline", "HN"),
@@ -946,7 +968,7 @@ iter <- function(i) {
     targs,
     manual_bounded_constraints = manual_bounded_constraints,
     carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = 0.141,
+    restoration_constraint = scenarios$restoration_constraint[[i]],
     #conservation_constraint = 0.3,
     production_constraints = TRUE,
     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
@@ -957,10 +979,10 @@ iter <- function(i) {
     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
-    name = "globiomIC",
-    solver = "highs")
+    name = "globiomIC_initialGLOBIOM",
+    solver = "gurobi")
 }
-
+iter(1)
 ## plan and run scenarios
 plan(multicore, workers = 6) # see ?future::plan, for other options
 

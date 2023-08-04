@@ -1,6 +1,7 @@
 ## Calculating the boundary limits for each zones in planning units
 ## Load packages
 library(tidyverse)
+library(fasterize)
 library(terra)
 library(raster)
 library(sf)
