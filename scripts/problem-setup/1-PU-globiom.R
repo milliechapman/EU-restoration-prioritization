@@ -10,21 +10,20 @@ library(fasterize)
 library(exactextractr)
 rm(list = ls())
 
-
 globiom_lc <- stack("data/landcover/5arcmin_augmented_ETL2_wprotection_shares 2.tif")[[2:24]]
 
-PU_template_r <- raster("data/landcover/10km/Corine_2018_cropland.tif") 
+PU_template_r <- raster("data/landcover/10km/Corine_2018_cropland.tif")
 PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   rasterToPolygons() |>
   st_as_sf() |>
   #st_transform(crs = st_crs(natura)) |>
   dplyr::mutate(PUID = seq(1:length(geometry))) |>
-  dplyr::select(-Corine_2018_cropland) 
+  dplyr::select(-Corine_2018_cropland)
 
 PU_raster <- fasterize(PU_template, PU_template_r, field = "PUID")
 
-globiom_lc <- projectRaster(globiom_lc, 
-                            crs = crs(PU_raster), 
+globiom_lc <- projectRaster(globiom_lc,
+                            crs = crs(PU_raster),
                             res = res(PU_raster))
 
 globiom_lc_crop <- crop(globiom_lc, extent(PU_raster))
@@ -44,7 +43,7 @@ z$value
 PU_lc_globiom_df <- as.data.frame(stack)
 
 PU_lc_globiom_df <- as.data.frame(stack) |>
-  rename(PUID = layer) 
+  rename(PUID = layer)
 
 glimpse(PU_lc_globiom_df)
 hist(PU_lc_globiom_df$Grassland)
@@ -54,7 +53,7 @@ test <- PU_lc_globiom_df |>
 
 PU_natura_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected,
-         HeathlandShrub = Heathland.and.shrub_protected + Transitional.woodland.shrub_protected, 
+         HeathlandShrub = Heathland.and.shrub_protected + Transitional.woodland.shrub_protected,
          Grassland = Grassland_protected,
          Pasture = Pasture_protected,
          SparseVeg = Sparsely.vegetated.areas_protected,
@@ -71,8 +70,8 @@ write_csv(PU_natura_globiom_lc, "data/outputs/1-PU/PU_natura_globiom_lc.csv")
 
 PU_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected + Woodland.and.forest,
-         HeathlandShrub = Heathland.and.shrub_protected + Heathland.and.shrub + 
-           Transitional.woodland.shrub +Transitional.woodland.shrub_protected, 
+         HeathlandShrub = Heathland.and.shrub_protected + Heathland.and.shrub +
+           Transitional.woodland.shrub +Transitional.woodland.shrub_protected,
          Grassland = Grassland_protected + Grassland,
          Pasture = Pasture_protected + Pasture,
          SparseVeg = Sparsely.vegetated.areas_protected + Sparsely.vegetated.areas,
@@ -85,7 +84,7 @@ PU_globiom_lc <- PU_lc_globiom_df |>
   dplyr::select(PUID, WoodlandForest, HeathlandShrub, Grassland, Pasture, SparseVeg,
                 Cropland, Urban, Wetlands, RiversLakes, MarineTransitional, Status)
 
-test <- PU_globiom_lc |> 
+test <- PU_globiom_lc |>
   dplyr::select(-Status) |>
   drop_na() |>
   pivot_longer(-PUID) |>
