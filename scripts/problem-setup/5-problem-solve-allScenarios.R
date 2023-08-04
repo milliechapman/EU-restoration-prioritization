@@ -38,7 +38,7 @@ problem_setup <- function(
     restoration_scenario,
     future = "f455", #f455, ref
     name,
-    solver = "highs" #high, gurobi
+    solver = "gurobi" #high, gurobi
 )
 {
   # FEATURE WEIGHTS matrix
@@ -847,13 +847,13 @@ targs <- targs |> left_join(targs_rm) |>
 
 # all the constraints
 if(apply_initialglobiom){
-  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_flex_initialGLOBIOM.csv"
+  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_initialGLOBIOM.csv"
 } else {
   of <- "data-formatted/manual_bounded_constraints_production_globiom_flex.csv"
 }
 manual_bounded_constraints <- read_csv(of) |>
   left_join(zones) |>
-  dplyr::select(-zone) |> dplyr::rename(pu = PUID) |>
+  dplyr::select(-zone) |> rename(pu = PUID) |>
   # dplyr::select(-c(zone, nuts2id)) |>
   rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper) |>
@@ -868,9 +868,9 @@ manual_bounded_constraints <- read_csv(of) |>
 # Checks
 if(max(rij$pu) != max(manual_bounded_constraints$pu)){
   manual_bounded_constraints <- manual_bounded_constraints |>
-    dplyr::filter(pu %in% pu_in_EU$pu) |>
-
-  assertthat::assert_that()
+    left_join(pu_in_EU) |>
+    drop_na(EU_id) |>
+    mutate(pu = EU_id)
 }
 # all the constraints
 

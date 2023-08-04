@@ -41,9 +41,99 @@ forests_production_perc <- forests_production/forests_total
 
 
 # Calculate crop intensity per PU
-crop_high <- rast("data/Dou_CropIntensity/DouEtAl_HighIntensityCropland.tif")
-crop_mid <- rast("data/Dou_CropIntensity/DouEtAl_MediumIntensityCropland.tif")
-crop_low <- rast("data/Dou_CropIntensity/DouEtAl_LowIntensityCropland.tif")
+crop_high <- rast("data/Dou_CropIntensity/DouEtAl_HighIntensityCropland.tif") /10000
+crop_mid <- rast("data/Dou_CropIntensity/DouEtAl_MediumIntensityCropland.tif") / 10000
+crop_low <- rast("data/Dou_CropIntensity/DouEtAl_LowIntensityCropland.tif") / 10000
+# Induce Piero correction here!
+if(apply_initialglobiom){
+  # The same for cropland
+  initial <-  read.csv("data/ManagementInitialConditions/EUCropland__2020primes_ref_2020REFERENCE_ver3.csv") |>
+    dplyr::select(NUTS2, Intensity_reclass, area_1000ha) |>
+    dplyr::mutate(Intensity_reclass = forcats::fct_collapse(Intensity_reclass,
+                                                            "Cropland_low_glob" = "MinimalCropland",
+                                                            "Cropland_med_glob" = "LightCropland",
+                                                            "Cropland_high_glob" = "IntenseCropland",
+                                                            "PermanentCropland" = "PermanentCropland"
+    )) |>
+    dplyr::group_by(NUTS2,Intensity_reclass) |>
+    dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
+    # Attribute permanent cropland to the others
+    tidyr::pivot_wider(names_from = "Intensity_reclass", values_from = "area_1000ha",values_fill = 0) |>
+    dplyr::group_by(NUTS2) |>
+    dplyr::mutate(Cropland_high_glob = Cropland_high_glob + (PermanentCropland/3),
+                  Cropland_med_glob = Cropland_med_glob + (PermanentCropland/3),
+                  Cropland_low_glob = Cropland_low_glob + (PermanentCropland/3)) |>
+    dplyr::ungroup() |> dplyr::select(-PermanentCropland) |>
+    tidyr::pivot_longer(cols = Cropland_high_glob:Cropland_low_glob,names_to = "Intensity_reclass",values_to = "area_1000ha") |>
+    # Convert to shares
+    dplyr::group_by(NUTS2) |>
+    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
+    dplyr::ungroup() |>
+    # To wide
+    dplyr::select(-area_1000ha) |>
+    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity_reclass, values_from = propshare,values_fill = 0)
+
+  # Join in with NUTS
+  nuts2_crop <- nuts2 |> dplyr::left_join(initial, by = c("NUTS_ID" = "NUTS2"))
+  # Rasterize Globiom NUTS shares
+  nuts2_globiom_crop_low <- terra::rasterize(nuts2_crop, rast_template, field = "Cropland_low_glob", fun = "mean")
+  nuts2_globiom_crop_mid <- terra::rasterize(nuts2_crop, rast_template, field = "Cropland_med_glob", fun = "mean")
+  nuts2_globiom_crop_high <- terra::rasterize(nuts2_crop, rast_template, field = "Cropland_high_glob", fun = "mean")
+
+  # Summarize Dou per NUTS region and rasterize again as above
+  nuts2_dou_low <- nuts2
+  nuts2_dou_low$dou_low_nuts <- terra::extract(crop_low,
+                                               nuts2_dou_low, fun = "sum", na.rm = TRUE)[['layer']]
+  nuts2_dou_low <- terra::rasterize(nuts2_dou_low, rast_template, field = "dou_low_nuts", fun = "mean")
+
+  nuts2_dou_mid <- nuts2
+  nuts2_dou_mid$dou_mid_nuts <- terra::extract(crop_mid,
+                                               nuts2_dou_mid, fun = "sum", na.rm = TRUE)[['layer']]
+  nuts2_dou_mid <- terra::rasterize(nuts2_dou_mid, rast_template, field = "dou_mid_nuts", fun = "mean")
+
+  nuts2_dou_high <- nuts2
+  nuts2_dou_high$dou_high_nuts <- terra::extract(crop_high,
+                                               nuts2_dou_high, fun = "sum", na.rm = TRUE)[['layer']]
+  nuts2_dou_high <- terra::rasterize(nuts2_dou_high, rast_template, field = "dou_high_nuts", fun = "mean")
+
+  # Take total cropland area directly from leo
+  pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
+  PU_lc <- read_csv("data/outputs/1-PU/PU_globiom_lc.csv") |> drop_na(PUID) |>
+    left_join(pu_in_EU, by = c("PUID" = "pu"))
+
+  PU_lc_nuts <- PU_lc |>
+      dplyr::group_by(nuts2id) |>
+      dplyr::summarise(Cropland_total = sum(Cropland, na.rm = TRUE),
+                       Cropland_totalarea_km2 = sum(Cropland * (10^2), na.rm = TRUE)) |>
+    left_join(nuts2, by = c("nuts2id" = "nutsIDnum"))
+  # Rasterize both types
+  Leo_cropland_nutssharesum <- terra::rasterize(PU_lc_nuts|> sf::st_as_sf(), rast(rast_template), field = "Cropland_total", fun = "sum")
+  Leo_cropland_nutsareasum <- terra::rasterize(PU_lc_nuts|> sf::st_as_sf(), rast(rast_template), field = "Cropland_totalarea_km2", fun = "sum")
+
+  Leo_cropland_pu_area <-  terra::rasterize(PU_lc |> dplyr::mutate(Cropland_areakm2 = Cropland * (10^2)) |>
+                                              left_join(PU_template) |>  sf::st_as_sf(),
+                                            rast(rast_template), field = "Cropland_areakm2", fun = "sum")
+  # --- #
+  # Apply correction step 1
+  # new(PU) = globiom_share(NUTS2) * share_dou_high(PU) / sum(shares_dou_high(NUTS2))
+  new_low <- rast(nuts2_globiom_crop_low) * crop_low / rast(nuts2_dou_low)
+  new_mid <- rast(nuts2_globiom_crop_mid) * crop_mid / rast(nuts2_dou_mid)
+  new_high <- rast(nuts2_globiom_crop_high) * crop_high / rast(nuts2_dou_high)
+
+  # Apply correction step 2
+  # new(PU) = new(PU) * totalCropland (NUTS2) (unit area for total cropland assumed)
+  new_low <- new_low * Leo_cropland_nutsareasum
+  new_mid <- new_mid * Leo_cropland_nutsareasum
+  new_high <- new_high * Leo_cropland_nutsareasum
+
+  # Apply correction step 3
+  # final(pu)=2ndintermediate_high(pu)/sum(2ndintermediate_high(pu),2ndintermediate_med(pu),2ndintermediate_low(pu))*area_cropland_leo(pu)
+  new_low_final <- new_low / sum(new_low, new_mid, new_high, na.rm = TRUE) * Leo_cropland_pu_area
+  new_mid_final <- new_mid / sum(new_low, new_mid, new_high, na.rm = TRUE) * Leo_cropland_pu_area
+  new_high_final <- new_high / sum(new_low, new_mid, new_high, na.rm = TRUE) * Leo_cropland_pu_area
+
+  stop("Continue from here and use the layers later")
+}
 crop_total <- sum(crop_low, crop_mid ,crop_high, na.rm = TRUE)
 crop_high_perc <- crop_high/crop_total
 crop_mid_perc <- crop_mid/crop_total
@@ -165,6 +255,7 @@ PU_natura_lc <- PU_natura_lc |>
 
 # Apply initial globiom correction
 if(apply_initialglobiom){
+  stop("Remove! Fix applied earlier")
   # Extract nuts2 id per PU
   nuts2_ras <- fasterize(nuts2, rast_template, field = "nutsIDnum", fun = "last")
   newpu <- PU_template
