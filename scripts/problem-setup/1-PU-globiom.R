@@ -8,9 +8,10 @@ library(terra)
 library(raster)
 library(fasterize)
 library(exactextractr)
+library(assertthat)
 rm(list = ls())
 
-globiom_lc <- stack("data/landcover/5arcmin_augmented_ETL2_wprotection_shares 2.tif")[[2:24]]
+globiom_lc <- stack("data/landcover/Protection_augmented_ETL2_shares_May_2023.tif")
 
 PU_template_r <- raster("data/landcover/10km/Corine_2018_cropland.tif")
 PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
@@ -20,6 +21,7 @@ PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   dplyr::mutate(PUID = seq(1:length(geometry))) |>
   dplyr::select(-Corine_2018_cropland)
 
+# Create a PU raster
 PU_raster <- fasterize(PU_template, PU_template_r, field = "PUID")
 
 globiom_lc <- projectRaster(globiom_lc,
@@ -31,25 +33,28 @@ PU_raster <- crop(PU_raster, extent(globiom_lc_crop))
 extent(globiom_lc_crop) <- extent(PU_raster)
 stack <- stack(globiom_lc_crop, PU_raster)
 
-nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp")
+nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
+  sf::st_transform(crs = sf::st_crs(globiom_lc))
 
 z <- nuts2 |>
   mutate(value = exactextractr::exact_extract(stack, nuts2, fun = "sum"),
          value_IC = exact_extract(globiom_lc, nuts2, fun = "sum"))
 
-z$value
-
+assert_that(is.data.frame(z$value))
 
 PU_lc_globiom_df <- as.data.frame(stack)
 
 PU_lc_globiom_df <- as.data.frame(stack) |>
   rename(PUID = layer)
 
-glimpse(PU_lc_globiom_df)
-hist(PU_lc_globiom_df$Grassland)
+# glimpse(PU_lc_globiom_df)
+# hist(PU_lc_globiom_df$Grassland)
 test <- PU_lc_globiom_df |>
   pivot_longer(-PUID) |>
-  group_by(PUID) |> summarise(area = sum(value))
+  tidyr::drop_na(PUID) |>
+  dplyr::group_by(PUID) |> dplyr::summarise(area = sum(value, na.rm = TRUE))
+
+assert_that(all(test$area <= 1))
 
 PU_natura_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected,
@@ -66,6 +71,7 @@ PU_natura_globiom_lc <- PU_lc_globiom_df |>
   dplyr::select(PUID, WoodlandForest, HeathlandShrub, Grassland, Pasture, SparseVeg,
                 Cropland, Urban, Wetlands, RiversLakes, MarineTransitional, Status)
 
+assertthat::assert_that()
 write_csv(PU_natura_globiom_lc, "data/outputs/1-PU/PU_natura_globiom_lc.csv")
 
 PU_globiom_lc <- PU_lc_globiom_df |>

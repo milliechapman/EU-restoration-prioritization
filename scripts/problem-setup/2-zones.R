@@ -44,6 +44,7 @@ forests_production_perc <- forests_production/forests_total
 crop_high <- rast("data/Dou_CropIntensity/DouEtAl_HighIntensityCropland.tif") /10000
 crop_mid <- rast("data/Dou_CropIntensity/DouEtAl_MediumIntensityCropland.tif") / 10000
 crop_low <- rast("data/Dou_CropIntensity/DouEtAl_LowIntensityCropland.tif") / 10000
+
 # Induce Piero correction here!
 if(apply_initialglobiom){
   # The same for cropland
@@ -58,6 +59,7 @@ if(apply_initialglobiom){
     dplyr::group_by(NUTS2,Intensity_reclass) |>
     dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
     # Attribute permanent cropland to the others
+    # dplyr::filter(Intensity_reclass != "PermanentCropland") |>
     tidyr::pivot_wider(names_from = "Intensity_reclass", values_from = "area_1000ha",values_fill = 0) |>
     dplyr::group_by(NUTS2) |>
     dplyr::mutate(Cropland_high_glob = Cropland_high_glob + (PermanentCropland/3),
@@ -132,16 +134,125 @@ if(apply_initialglobiom){
   new_mid_final <- new_mid / sum(new_low, new_mid, new_high, na.rm = TRUE) * Leo_cropland_pu_area
   new_high_final <- new_high / sum(new_low, new_mid, new_high, na.rm = TRUE) * Leo_cropland_pu_area
 
-  stop("Continue from here and use the layers later")
+  # --- #
+  # Some tests
+  # --> This one checks that it sums to 1
+  test_tot <- sum(new_low_final, new_mid_final, new_high_final,na.rm = TRUE) / Leo_cropland_pu_area
+  assertthat::assert_that(round(terra::global(test_tot,"max",na.rm = TRUE)[,1],2)==1)
+  test <- terra::extract(new_high_final, nuts2, fun = "sum", na.rm = TRUE)
+  test2 <- terra::extract(rast(nuts2_globiom_crop_high) * Leo_cropland_pu_area, nuts2, fun = "sum", na.rm = TRUE)
+  plot(test$layer, test2$layer, xlab = "New high estimate (km2)", ylab= "Globiom high estimate(km2)")
+  # --- #
+
+  crop_total <- sum(new_low_final/ terra::cellSize(new_low_final, unit = "km"),
+                    new_mid_final/ terra::cellSize(new_mid_final, unit = "km"),
+                    new_high_final/ terra::cellSize(new_high_final, unit = "km"), na.rm = TRUE)
+  crop_high_perc <- new_high_final/ terra::cellSize(new_high_final, unit = "km")/crop_total
+  crop_mid_perc <- new_mid_final/ terra::cellSize(new_mid_final, unit = "km")/crop_total
+  crop_low_perc <- new_low_final/ terra::cellSize(new_low_final, unit = "km")/crop_total
+  assertthat::assert_that(
+    all(terra::global(c(crop_high_perc, crop_mid_perc, crop_low_perc), "max",na.rm = TRUE)[,1] <= 1)
+  )
+
+} else {
+  crop_total <- sum(crop_low, crop_mid ,crop_high, na.rm = TRUE)
+  crop_high_perc <- crop_high/crop_total
+  crop_mid_perc <- crop_mid/crop_total
+  crop_low_perc <- crop_low/crop_total
 }
-crop_total <- sum(crop_low, crop_mid ,crop_high, na.rm = TRUE)
-crop_high_perc <- crop_high/crop_total
-crop_mid_perc <- crop_mid/crop_total
-crop_low_perc <- crop_low/crop_total
 
 # same w/ pasture intensity
 pasture_high <- rast("data/IntensityLayersPastureCrop/PastureCLC_HighintensityEPIC_ver2.tif")#rast("data/ManagementIntensity/10000/PastureCLC_HighintensityEPIC.tif")
 pasture_low <- rast("data/IntensityLayersPastureCrop/PastureCLC_LowintensityEPIC_ver2.tif") #rast("data/ManagementIntensity/10000/PastureCLC_LowintensityEPIC.tif")
+if(apply_initialglobiom){
+  # The same for cropland
+  initial <-  read.csv("data/ManagementInitialConditions/EUPasture__2020primes_ref_2020REFERENCE_ver3.csv") |>
+    dplyr::select(NUTS2, Intensity, area_1000ha) |>
+    dplyr::mutate(Intensity = forcats::fct_collapse(Intensity,
+                                                            "pasture_low_globiom" = "LowIntensityPasture",
+                                                            "pasture_high_globiom" = "HighIntensityPasture"
+    )) |>
+    dplyr::group_by(NUTS2, Intensity) |>
+    dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
+    # Convert to shares
+    dplyr::group_by(NUTS2) |>
+    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
+    dplyr::ungroup() |>
+    # To wide
+    dplyr::select(-area_1000ha) |>
+    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity, values_from = propshare,values_fill = 0)
+
+  # Join in with NUTS
+  nuts2_past <- nuts2 |> dplyr::left_join(initial, by = c("NUTS_ID" = "NUTS2"))
+  # Rasterize Globiom NUTS shares
+  nuts2_globiom_past_low <- terra::rasterize(nuts2_past, rast_template, field = "pasture_low_globiom", fun = "mean")
+  nuts2_globiom_past_high <- terra::rasterize(nuts2_past, rast_template, field = "pasture_high_globiom", fun = "mean")
+
+  # Summarize Dou per NUTS region and rasterize again as above
+  nuts2_past_low <- nuts2
+  nuts2_past_low$value <- terra::extract(pasture_low,
+                                               nuts2_past_low, fun = "sum", na.rm = TRUE)[['layer']]
+  nuts2_past_low <- terra::rasterize(nuts2_past_low, rast_template, field = "value", fun = "mean")
+
+  nuts2_past_high <- nuts2
+  nuts2_past_high$value <- terra::extract(pasture_high,
+                                                 nuts2_past_high, fun = "sum", na.rm = TRUE)[['layer']]
+  nuts2_past_high <- terra::rasterize(nuts2_past_high, rast_template, field = "value", fun = "mean")
+
+  # Take total cropland area directly from leo
+  pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
+  PU_lc <- read_csv("data/outputs/1-PU/PU_globiom_lc.csv") |> drop_na(PUID) |>
+    left_join(pu_in_EU, by = c("PUID" = "pu"))
+
+  PU_lc_nuts <- PU_lc |>
+    dplyr::group_by(nuts2id) |>
+    dplyr::summarise(Pasture_total = sum(Pasture, na.rm = TRUE),
+                     Pasture_totalarea_km2 = sum(Pasture * (10^2), na.rm = TRUE)) |>
+    left_join(nuts2, by = c("nuts2id" = "nutsIDnum"))
+  # Rasterize both types
+  Leo_pasture_nutssharesum <- terra::rasterize(PU_lc_nuts|> sf::st_as_sf(), rast(rast_template), field = "Pasture_total", fun = "sum")
+  Leo_pasture_nutsareasum <- terra::rasterize(PU_lc_nuts|> sf::st_as_sf(), rast(rast_template), field = "Pasture_totalarea_km2", fun = "sum")
+
+  Leo_pasture_pu_area <-  terra::rasterize(PU_lc |> dplyr::mutate(Pasture_areakm2 = Pasture * (10^2)) |>
+                                              left_join(PU_template) |>  sf::st_as_sf(),
+                                            rast(rast_template), field = "Pasture_areakm2", fun = "sum")
+  # --- #
+  # Apply correction step 1
+  # new(PU) = globiom_share(NUTS2) * share_dou_high(PU) / sum(shares_dou_high(NUTS2))
+  new_low <- rast(nuts2_globiom_past_low) * pasture_low / rast(nuts2_past_low)
+  new_high <- rast(nuts2_globiom_past_high) * pasture_high / rast(nuts2_past_high)
+
+  # Apply correction step 2
+  # new(PU) = new(PU) * totalCropland (NUTS2) (unit area for total cropland assumed)
+  new_low <- new_low *  Leo_pasture_nutsareasum
+  new_high <- new_high *  Leo_pasture_nutsareasum
+
+  # Apply correction step 3
+  # final(pu)=2ndintermediate_high(pu)/sum(2ndintermediate_high(pu),2ndintermediate_med(pu),2ndintermediate_low(pu))*area_cropland_leo(pu)
+  new_low_final <- new_low / sum(new_low, new_high, na.rm = TRUE) * Leo_pasture_pu_area
+  new_high_final <- new_high / sum(new_low, new_high, na.rm = TRUE) * Leo_pasture_pu_area
+
+  # --- #
+  # Some tests
+  # --> This one mismatches
+  test <- terra::extract(new_high_final, nuts2, fun = "sum", na.rm = TRUE)
+  test2 <- terra::extract(rast(nuts2_globiom_past_high) * Leo_pasture_pu_area, nuts2, fun = "sum", na.rm = TRUE)
+  plot(test$layer, test2$layer, xlab = "New high estimate (km2)", ylab= "Globiom high estimate(km2)")
+  # --- #
+
+  pasture_total <- sum(pasture_high / terra::cellSize(new_high_final, unit = "km"),
+                       pasture_low / terra::cellSize(new_low_final, unit = "km"), na.rm = TRUE)
+  pasture_high_perc <- pasture_high / terra::cellSize(new_high_final, unit = "km") / pasture_total
+  pasture_low_perc <- pasture_low/ terra::cellSize(new_low_final, unit = "km") / pasture_total
+
+  assertthat::assert_that(
+    all(terra::global(c(pasture_high_perc, pasture_low_perc), "max",na.rm = TRUE)[,1] <= 1)
+  )
+} else {
+  pasture_total <- sum(pasture_high, pasture_low, na.rm = TRUE)
+  pasture_high_perc <- pasture_high/pasture_total
+  pasture_low_perc <- pasture_low/pasture_total
+}
 
 nuts2_pasture <- nuts2 |>
   mutate(pasture_high = exactextractr::exact_extract(pasture_high, nuts2, 'sum'),
@@ -155,10 +266,6 @@ nuts2_pasture <- nuts2 |>
   dplyr::select(NUTS_ID, pasture_high_perc,pasture_low_perc)
 
 write_csv(nuts2_pasture, "data/ag_intensity/nuts2_pasture_intensity_perc.csv")
-
-pasture_total <- sum(pasture_high + pasture_low, na.rm = TRUE)
-pasture_high_perc <- pasture_high/pasture_total
-pasture_low_perc <- pasture_low/pasture_total
 
 # extract by PU
 PU_intensity_forests <- PU_template |>
