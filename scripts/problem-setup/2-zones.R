@@ -362,107 +362,9 @@ PU_natura_lc <- PU_natura_lc |>
 
 # Apply initial globiom correction
 if(apply_initialglobiom){
-  stop("Remove! Fix applied earlier")
-  # Extract nuts2 id per PU
-  nuts2_ras <- fasterize(nuts2, rast_template, field = "nutsIDnum", fun = "last")
-  newpu <- PU_template
-  newpu$nutsIDnum <- exactextractr::exact_extract(nuts2_ras, PU_template, "max")
-  newpu <- newpu |> sf::st_drop_geometry() |> dplyr::filter(!is.na(nutsIDnum))
-  # Get the actual NUTS2 id
-  newpu <- left_join(newpu, nuts2 |> dplyr::select(NUTS2,nutsIDnum) |> sf::st_drop_geometry(),  "nutsIDnum")
-  newpu <- newpu |> dplyr::select(-nutsIDnum)
-  # Join in the nuts id with the PU_natura_lc
-  PU_natura_lc <- left_join(PU_natura_lc, newpu, by = "PUID")
-  rm(newpu)
-
-  # Load in the initial targets for reference (assuming they are both relatively comparable)
-  initial <- read.csv("data/ManagementInitialConditions/EUPasture__2020primes_ref_2020REFERENCE_ver3.csv") |>
-    dplyr::select(NUTS2, Intensity, area_1000ha) |>
-    dplyr::mutate(Intensity = forcats::fct_collapse(Intensity,
-                                                    "pasture_high_perc_glob" = "HighIntensityPasture",
-                                                    "pasture_low_perc_glob" = "LowIntensityPasture"
-    )) |>
-    # Convert to shares
-    dplyr::group_by(NUTS2) |>
-    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
-    dplyr::ungroup() |>
-    dplyr::select(-area_1000ha) |>
-    # To wide
-    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity, values_from = propshare,values_fill = 0)
-  initial$pasture_high_perc_glob[is.nan(initial$pasture_high_perc_glob)] <- 0
-  initial$pasture_low_perc_glob[is.nan(initial$pasture_low_perc_glob)] <- 0
-
-  # The same for cropland
-  initial2 <-  read.csv("data/ManagementInitialConditions/EUCropland__2020primes_ref_2020REFERENCE_ver3.csv") |>
-    dplyr::select(NUTS2, Intensity_reclass, area_1000ha) |>
-    dplyr::mutate(Intensity_reclass = forcats::fct_collapse(Intensity_reclass,
-                                                    "Cropland_low_glob" = "MinimalCropland",
-                                                    "Cropland_med_glob" = "LightCropland",
-                                                    "Cropland_high_glob" = "IntenseCropland",
-                                                    "PermanentCropland" = "PermanentCropland"
-    )) |>
-    dplyr::group_by(NUTS2,Intensity_reclass) |>
-    dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
-    # Attribute permanent cropland to the others
-      tidyr::pivot_wider(names_from = "Intensity_reclass", values_from = "area_1000ha",values_fill = 0) |>
-      dplyr::group_by(NUTS2) |>
-      dplyr::mutate(Cropland_high_glob = Cropland_high_glob + (PermanentCropland/3),
-                    Cropland_med_glob = Cropland_med_glob + (PermanentCropland/3),
-                    Cropland_low_glob = Cropland_low_glob + (PermanentCropland/3)) |>
-      dplyr::ungroup() |> dplyr::select(-PermanentCropland) |>
-      tidyr::pivot_longer(cols = Cropland_high_glob:Cropland_low_glob,names_to = "Intensity_reclass",values_to = "area_1000ha") |>
-    # Convert to shares
-    dplyr::group_by(NUTS2) |>
-    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
-    dplyr::ungroup() |>
-    dplyr::select(-area_1000ha) |>
-    # To wide
-    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity_reclass, values_from = propshare,values_fill = 0)
-
-  # Combine the 2 initial shares
-  initial_comb <- dplyr::left_join(initial,initial2)
-
-  # Now join in new shares
-  new <- dplyr::left_join(PU_natura_lc, initial_comb, by = "NUTS2")
-
-  # --- #
-  # Apply correction
-  # Summarize per nuts2
-  new <- dplyr::left_join(new,
-                          new |> dplyr::group_by(NUTS2) |> dplyr::summarise(Pasture_low_total = sum(Pasture_low, na.rm = TRUE),
-                                                                            Pasture_high_total = sum(Pasture_high, na.rm = TRUE),
-                                                                            Cropland_low_total = sum(Cropland_low, na.rm = TRUE),
-                                                                            Cropland_med_total = sum(Cropland_med, na.rm = TRUE),
-                                                                            Cropland_high_total = sum(Cropland_high, na.rm = TRUE)
-                                                                            )
-  )
-  o <- new$pasture_low_perc_glob * (new$Pasture_low/new$Pasture_low_total)
-  # If sum of corrected shares should be equal to the globiom initial share (or at least not larger)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$pasture_low_perc_glob,na.rm=TRUE) )
-  new$Pasture_low <- o
-
-  o <- new$pasture_high_perc_glob * (new$Pasture_high/new$Pasture_high_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$pasture_high_perc_glob,na.rm=TRUE) )
-  new$Pasture_high <- o
-  # Cropland
-  o <- new$Cropland_low_glob * (new$Cropland_low/new$Cropland_low_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_low_glob,na.rm=TRUE) )
-  new$Cropland_low <- o
-  o <- new$Cropland_med_glob * (new$Cropland_med/new$Cropland_med_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_med_glob,na.rm=TRUE) )
-  new$Cropland_med <- o
-  o <- new$Cropland_high_glob * (new$Cropland_high/new$Cropland_high_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_high_glob,na.rm=TRUE) )
-  new$Cropland_high <- o
-
-  new <- new |> dplyr::select(-Pasture_low_total,-Pasture_high_total,-pasture_low_perc_glob,-pasture_high_perc_glob,
-                              -Cropland_low_glob,-Cropland_med_glob,-Cropland_high_glob,-Cropland_low_total,-Cropland_med_total,
-                              -Cropland_high_total)
-  assertthat::assert_that(!any(stringr::str_detect(names(new),"glob|total")))
-  if("NUTS2" %in% names(new)) new <- new |> dplyr::select(-NUTS2)
   # --- #
   # Write output
-  write_csv(new, "data/outputs/2-zones/PU_natura_lc_intensity_initialGLOBIOM.csv")
+  write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity_initialGLOBIOM.csv")
 } else {
   # Write output
   write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity.csv")
@@ -519,106 +421,8 @@ PU_lc <- PU_lc  |>
 
 # Apply initial globiom correction
 if(apply_initialglobiom){
-  # Extract nuts2 id per PU
-  nuts2_ras <- fasterize(nuts2, rast_template, field = "nutsIDnum", fun = "last")
-  newpu <- PU_template
-  newpu$nutsIDnum <- exactextractr::exact_extract(nuts2_ras, PU_template, "max")
-  newpu <- newpu |> sf::st_drop_geometry() |> dplyr::filter(!is.na(nutsIDnum))
-  # Get the actual NUTS2 id
-  newpu <- left_join(newpu, nuts2 |> dplyr::select(NUTS2,nutsIDnum) |> sf::st_drop_geometry(),  "nutsIDnum")
-  newpu <- newpu |> dplyr::select(-nutsIDnum)
-  # Join in the nuts id with the PU_natura_lc
-  PU_lc <- left_join(PU_lc, newpu, by = "PUID")
-  rm(newpu)
-
-  # Load in the initial targets for reference (assuming they are both relatively comparable)
-  initial <- read.csv("data/ManagementInitialConditions/EUPasture__2020primes_ref_2020REFERENCE_ver3.csv") |>
-    dplyr::select(NUTS2, Intensity, area_1000ha) |>
-    dplyr::mutate(Intensity = forcats::fct_collapse(Intensity,
-                                                    "pasture_high_perc_glob" = "HighIntensityPasture",
-                                                    "pasture_low_perc_glob" = "LowIntensityPasture"
-    )) |>
-    # Convert to shares
-    dplyr::group_by(NUTS2) |>
-    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
-    dplyr::ungroup() |>
-    dplyr::select(-area_1000ha) |>
-    # To wide
-    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity, values_from = propshare,values_fill = 0)
-  initial$pasture_high_perc_glob[is.nan(initial$pasture_high_perc_glob)] <- 0
-  initial$pasture_low_perc_glob[is.nan(initial$pasture_low_perc_glob)] <- 0
-
-  # The same for cropland
-  initial2 <-  read.csv("data/ManagementInitialConditions/EUCropland__2020primes_ref_2020REFERENCE_ver3.csv") |>
-    dplyr::select(NUTS2, Intensity_reclass, area_1000ha) |>
-    dplyr::mutate(Intensity_reclass = forcats::fct_collapse(Intensity_reclass,
-                                                            "Cropland_low_glob" = "MinimalCropland",
-                                                            "Cropland_med_glob" = "LightCropland",
-                                                            "Cropland_high_glob" = "IntenseCropland",
-                                                            "PermanentCropland" = "PermanentCropland"
-    )) |>
-    dplyr::group_by(NUTS2,Intensity_reclass) |>
-    dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
-    # Attribute permanent cropland to the others
-    tidyr::pivot_wider(names_from = "Intensity_reclass", values_from = "area_1000ha",values_fill = 0) |>
-    dplyr::group_by(NUTS2) |>
-    dplyr::mutate(Cropland_high_glob = Cropland_high_glob + (PermanentCropland/3),
-                  Cropland_med_glob = Cropland_med_glob + (PermanentCropland/3),
-                  Cropland_low_glob = Cropland_low_glob + (PermanentCropland/3)) |>
-    dplyr::ungroup() |> dplyr::select(-PermanentCropland) |>
-    tidyr::pivot_longer(cols = Cropland_high_glob:Cropland_low_glob,names_to = "Intensity_reclass",values_to = "area_1000ha") |>
-    # Convert to shares
-    dplyr::group_by(NUTS2) |>
-    dplyr::mutate(propshare = area_1000ha/sum(area_1000ha)) |>
-    dplyr::ungroup() |>
-    dplyr::select(-area_1000ha) |>
-    # To wide
-    tidyr::pivot_wider(id_cols = NUTS2,names_from = Intensity_reclass, values_from = propshare,values_fill = 0)
-
-  # Combine the 2 initial shares
-  initial_comb <- dplyr::left_join(initial,initial2)
-
-  # Now join in new shares
-  new <- dplyr::left_join(PU_lc, initial_comb, by = "NUTS2")
-
-  # --- #
-  # Apply correction
-  # Summarize per nuts2
-  new <- dplyr::left_join(new,
-                          new |> dplyr::group_by(NUTS2) |> dplyr::summarise(Pasture_low_total = sum(Pasture_low, na.rm = TRUE),
-                                                                            Pasture_high_total = sum(Pasture_high, na.rm = TRUE),
-                                                                            Cropland_low_total = sum(Cropland_low, na.rm = TRUE),
-                                                                            Cropland_med_total = sum(Cropland_med, na.rm = TRUE),
-                                                                            Cropland_high_total = sum(Cropland_high, na.rm = TRUE)
-                          )
-  )
-  o <- new$pasture_low_perc_glob * (new$Pasture_low/new$Pasture_low_total)
-  # If sum of corrected shares should be equal to the globiom initial share (or at least not larger)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$pasture_low_perc_glob,na.rm=TRUE) )
-  new$Pasture_low <- o
-
-  o <- new$pasture_high_perc_glob * (new$Pasture_high/new$Pasture_high_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$pasture_high_perc_glob,na.rm=TRUE) )
-  new$Pasture_high <- o
-  # Cropland
-  o <- new$Cropland_low_glob * (new$Cropland_low/new$Cropland_low_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_low_glob,na.rm=TRUE) )
-  new$Cropland_low <- o
-  o <- new$Cropland_med_glob * (new$Cropland_med/new$Cropland_med_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_med_glob,na.rm=TRUE) )
-  new$Cropland_med <- o
-  o <- new$Cropland_high_glob * (new$Cropland_high/new$Cropland_high_total)
-  assertthat::assert_that( sum(o,na.rm = T) <= sum(new$Cropland_high_glob,na.rm=TRUE) )
-  new$Cropland_high <- o
-
-  new <- new |> dplyr::select(-Pasture_low_total,-Pasture_high_total,-pasture_low_perc_glob,-pasture_high_perc_glob,
-                              -Cropland_low_glob,-Cropland_med_glob,-Cropland_high_glob,-Cropland_low_total,-Cropland_med_total,
-                              -Cropland_high_total)
-  assertthat::assert_that(!any(stringr::str_detect(names(new),"glob|total")))
-  # --- #
-  if("NUTS2" %in% names(new)) new <- new |> dplyr::select(-NUTS2)
   # Write output
-  write_csv(new, "data/outputs/2-zones/PU_lc_intensity_initialGLOBIOM.csv")
+  write_csv(PU_lc, "data/outputs/2-zones/PU_lc_intensity_initialGLOBIOM.csv")
 } else {
   # Write output
   write_csv(PU_lc, "data/outputs/2-zones/PU_lc_intensity.csv")
@@ -761,6 +565,7 @@ lc_n2k <- PU_natura_lc |>
   group_by(PUID) |>
   summarize(area_protected = sum(value, na.rm = TRUE))# cropland and pastureland
 hist(lc_n2k$area_protected)
+assertthat::assert_that(all(lc_n2k$area_protected <= 1))
 ##not part of upper limit
 ## LC full PUT
 ## get 90% of current crop area
