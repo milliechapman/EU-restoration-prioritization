@@ -847,14 +847,14 @@ targs <- targs |> left_join(targs_rm) |>
 
 # all the constraints
 if(apply_initialglobiom){
-  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_initialGLOBIOM.csv"
+  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_flex_initialGLOBIOM.csv"
 } else {
   of <- "data-formatted/manual_bounded_constraints_production_globiom_flex.csv"
 }
 manual_bounded_constraints <- read_csv(of) |>
   left_join(zones) |>
-  dplyr::select(-zone) |> rename(pu = PUID) |>
-  # dplyr::select(-c(zone, nuts2id)) |>
+  # dplyr::select(-zone) |> rename(pu = PUID) |>
+  dplyr::select(-c(zone, nuts2id)) |>
   rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper) |>
   drop_na() |>
@@ -979,7 +979,7 @@ iter <- function(i) {
     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
-    name = "globiomIC_initialGLOBIOM",
+    name = ifelse(apply_initialglobiom, "globiomIC_initialGLOBIOM", "globiomIC"),
     solver = "gurobi")
 }
 iter(1)

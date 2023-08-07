@@ -119,8 +119,7 @@ features_split_spp_targets <- read_fst("data/formatted-data/features_data_spp_fo
   mutate(feature = as.numeric(feature)) |>
   dplyr::select(-BR_cou)
 
-features_split_spp_targets
-
+assertthat::assert_that(all(features_split_spp_targets$amount <= 1))
 
 lc_targets <- PU_lc |>
   left_join(zone_id) |> dplyr::select(-MAES) |>
@@ -180,9 +179,7 @@ targets_split |>
          zone = list(z$name)) |>
   write_csv(of)
 
-## formatted targets
-##
-
+#### formatted targets ----
 
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
@@ -192,7 +189,6 @@ pu <- read_fst("data/formatted-data/pu_data.fst") |>
   dplyr::select(-c(pu, nuts2id)) |>
   drop_na(id)
 
-
 rij <- read_fst("data/formatted-data/features_split.fst") |>
   rename(species = feature) |>
   #mutate(amount = round(amount)) |>
@@ -201,7 +197,6 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
   dplyr::select(pu, species, zone, amount) |>
   drop_na(pu) |>
   mutate(amount = ifelse(amount<0.001, 0, amount))
-
 
 # COST COLUMNS: names of cost cols from pu_data
 cost_columns <- colnames(pu)[1:(ncol(pu)-1)]
@@ -284,7 +279,10 @@ targs <- targs |> left_join(targs_rm) |>
 
 targs_join <- targs |>
   rename(species = feature) |>
-  dplyr::select(species, target) |>
+  # MJ 07/08/2023
+  # Corrected this to make the joined targets have the right columns
+  dplyr::select(-weight) |>
+  # dplyr::select(species, target) |>
   mutate(species = as.numeric(species))
 
 if(apply_initialglobiom){

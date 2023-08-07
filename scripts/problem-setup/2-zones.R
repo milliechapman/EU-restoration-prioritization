@@ -840,7 +840,7 @@ crop_conflicts <- manual_bounded_constraints |> as_tibble() |>
   dplyr::select(nuts2id, difference, NUTS_ID)
 #
 # pasture conflicts
-pasture <- read_csv("data/production_targets/EUPasture__primes_MIX55_V2GHG_CO2_10_FIX_BLTrd_ver3.csv") |>
+pasture <- read_csv("data/production_targets/EUPasture__primes_ref_2020REFERENCE_ver3.csv") |>
   dplyr::select(NUTS2, Intensity, area_1000ha) |>
   rename(NUTS_ID = NUTS2,
          name = Intensity,
