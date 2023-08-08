@@ -34,14 +34,22 @@ stack <- stack(globiom_lc_crop, PU_raster)
 
 nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp")
 
+perm_crop <- projectRaster(perm_crop,
+                           crs = crs(PU_raster),
+                           res = res(PU_raster))
+
+perm_crop <- crop(perm_crop, extent(PU_raster))
+extent(perm_crop) <- extent(PU_raster)
+perm_crop <- stack(perm_crop, PU_raster)
+perm_crop_df <- as.data.frame(perm_crop) |>
+  rename(PUID = layer)
+write_csv(perm_crop_df, "data/outputs/1-PU/PU_globiom_permcrop.csv")
+
+
 z <- nuts2 |>
   mutate(value = exactextractr::exact_extract(stack, nuts2, fun = "sum"),
          value_IC = exact_extract(globiom_lc, nuts2, fun = "sum"))
 
-z$value
-
-
-PU_lc_globiom_df <- as.data.frame(stack)
 
 PU_lc_globiom_df <- as.data.frame(stack) |>
   rename(PUID = layer)
