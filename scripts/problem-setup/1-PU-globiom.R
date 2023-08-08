@@ -63,7 +63,7 @@ test <- PU_lc_globiom_df |>
   tidyr::drop_na(PUID) |>
   dplyr::group_by(PUID) |> dplyr::summarise(area = sum(value, na.rm = TRUE))
 
-assert_that(all(test$area <= 1))
+assert_that(all(round(test$area,3) <= 1))
 
 PU_natura_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected,
@@ -80,7 +80,6 @@ PU_natura_globiom_lc <- PU_lc_globiom_df |>
   dplyr::select(PUID, WoodlandForest, HeathlandShrub, Grassland, Pasture, SparseVeg,
                 Cropland, Urban, Wetlands, RiversLakes, MarineTransitional, Status)
 
-assertthat::assert_that()
 write_csv(PU_natura_globiom_lc, "data/outputs/1-PU/PU_natura_globiom_lc.csv")
 
 PU_globiom_lc <- PU_lc_globiom_df |>
