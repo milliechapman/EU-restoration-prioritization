@@ -11,7 +11,8 @@ library(exactextractr)
 library(assertthat)
 rm(list = ls())
 
-globiom_lc <- stack("data/landcover/Protection_augmented_ETL2_shares_May_2023.tif")
+globiom_lc <- stack("data/initial_lc_globiom/Protection_augmented_ETL2_shares_August_2023.tif")
+perm_crop <- stack("data/initial_lc_globiom/Permanent_Cropland_split_share_total_crop_area_August_2023.tif")
 
 PU_template_r <- raster("data/landcover/10km/Corine_2018_cropland.tif")
 PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
@@ -36,13 +37,21 @@ stack <- stack(globiom_lc_crop, PU_raster)
 nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
   sf::st_transform(crs = sf::st_crs(globiom_lc))
 
+perm_crop <- projectRaster(perm_crop,
+                           crs = crs(PU_raster),
+                           res = res(PU_raster))
+
+perm_crop <- crop(perm_crop, extent(PU_raster))
+extent(perm_crop) <- extent(PU_raster)
+perm_crop <- stack(perm_crop, PU_raster)
+perm_crop_df <- as.data.frame(perm_crop) |>
+  rename(PUID = layer)
+write_csv(perm_crop_df, "data/outputs/1-PU/PU_globiom_permcrop.csv")
+
+
 z <- nuts2 |>
   mutate(value = exactextractr::exact_extract(stack, nuts2, fun = "sum"),
          value_IC = exact_extract(globiom_lc, nuts2, fun = "sum"))
-
-assert_that(is.data.frame(z$value))
-
-PU_lc_globiom_df <- as.data.frame(stack)
 
 PU_lc_globiom_df <- as.data.frame(stack) |>
   rename(PUID = layer)
@@ -58,7 +67,7 @@ assert_that(all(test$area <= 1))
 
 PU_natura_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected,
-         HeathlandShrub = Heathland.and.shrub_protected + Transitional.woodland.shrub_protected,
+         HeathlandShrub = Heathland.and.shrub_protected, #+ Transitional.woodland.shrub_protected,
          Grassland = Grassland_protected,
          Pasture = Pasture_protected,
          SparseVeg = Sparsely.vegetated.areas_protected,
@@ -77,7 +86,7 @@ write_csv(PU_natura_globiom_lc, "data/outputs/1-PU/PU_natura_globiom_lc.csv")
 PU_globiom_lc <- PU_lc_globiom_df |>
   mutate(WoodlandForest = Woodland.and.forest_protected + Woodland.and.forest,
          HeathlandShrub = Heathland.and.shrub_protected + Heathland.and.shrub +
-           Transitional.woodland.shrub +Transitional.woodland.shrub_protected,
+           Transitional.woodland.shrub, #+Transitional.woodland.shrub_protected,
          Grassland = Grassland_protected + Grassland,
          Pasture = Pasture_protected + Pasture,
          SparseVeg = Sparsely.vegetated.areas_protected + Sparsely.vegetated.areas,
