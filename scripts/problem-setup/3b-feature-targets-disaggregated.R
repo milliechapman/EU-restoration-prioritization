@@ -15,7 +15,7 @@ PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   st_as_sf() |>
   #st_transform(crs = st_crs(natura)) |>
   dplyr::mutate(PUID = seq(1:length(geometry))) |>
-  dplyr::select(-Corine_2018_cropland) 
+  dplyr::select(-Corine_2018_cropland)
 # make it into a raster
 PU_raster <- fasterize(sf = PU_template, raster = raster(spp[[1]]), field = "PUID")
 
@@ -41,7 +41,7 @@ country_code <- as_tibble(nuts2_shp) |>
 
 country_raster <- nuts2_shp |> left_join(country_code) |>
   fasterize(BR_raster, field = "country_code") |>
-  crop(BR_raster) 
+  crop(BR_raster)
 
 # bioregion-country-PU
 
@@ -71,7 +71,7 @@ zone_id <- read_csv("data/formatted-data/zone_id.csv") |>
   dplyr::select(id, MAES) |> rename(zone = id)
 
 
-bioregion_country_split <- bioregion_country_split |> 
+bioregion_country_split <- bioregion_country_split |>
   drop_na() |>
   mutate(BR = sprintf("%02d",BR),
          country = sprintf("%02d",country)) |>
@@ -80,7 +80,7 @@ bioregion_country_split <- bioregion_country_split |>
 
 features_spp <- read_fst("data/formatted-data/features_data_all.fst") |>
   filter(feature != 999999) |>
-  left_join(bioregion_country_split) 
+  left_join(bioregion_country_split)
 
 features_split_spp <- features_spp |>
   drop_na() |>
@@ -88,7 +88,7 @@ features_split_spp <- features_spp |>
   mutate(feature = as.numeric(feature)) |>
   dplyr::select(-BR_cou)
 
-carbon <- 
+carbon <-
   read_fst("data/formatted-data/features_data_all.fst") |>
   filter(feature == 999999)
 
@@ -101,7 +101,7 @@ features_split_spp |> bind_rows(carbon) |>
 # landcover area per PU relevant to zone - conservation and production
 # mutate to get total AOH for species
 # mutate to get the AOH percentage in the country/biome
-# target = AOH*AOH percentage 
+# target = AOH*AOH percentage
 features_split_spp_targets <- read_fst("data/formatted-data/features_data_spp_fortargets.fst") |>
   filter(feature != 999999) |>
   left_join(bioregion_country_split) |>
@@ -110,7 +110,7 @@ features_split_spp_targets <- read_fst("data/formatted-data/features_data_spp_fo
   mutate(feature = as.numeric(feature)) |>
   dplyr::select(-BR_cou)
 
-features_split_spp_targets 
+features_split_spp_targets
 
 
 lc_targets <- PU_lc |>
@@ -135,7 +135,7 @@ targets_split <- targets_split_spp |>
   ungroup() |>
   mutate(perc_target = AOH_split/AOH) |>
   mutate(target = AOH) |>
-  mutate(target = ifelse(target > 10^4, 10^4, target))  |> 
+  mutate(target = ifelse(target > 10^4, 10^4, target))  |>
   mutate(target = ifelse(target <22, 22, target)) |>
   # mutate(target = target/100) |>
   mutate(target = target*perc_target) |>
@@ -159,7 +159,7 @@ carbon_target <- tibble::tibble(id = 999999, name = "carbon", target = carbon_ta
 carbon_target <- carbon_target |> mutate(feature = id) |>
   dplyr::select(-c(id, name))
 
-targets_split |> 
+targets_split |>
   bind_rows(carbon_target) |>
   mutate(sense = ">=",
          type = "absolute",
@@ -167,7 +167,7 @@ targets_split |>
   write_csv("data/formatted-data/targets_split.csv")
 
 ## formatted targets
-## 
+##
 
 
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
@@ -203,7 +203,7 @@ carbon_id <- data.frame(
 )
 
 feat <-feat_rij |>
-  #left_join(species_id) |> 
+  #left_join(species_id) |>
   mutate(name = as.factor(id)) |>
   dplyr::select(id,  name, prop) |>
   drop_na(id) |>
@@ -219,7 +219,7 @@ z <- read_csv("data/formatted-data/zone_id.csv") |>
 # # zone ids for this..
 
 zones <- read_csv("data/formatted-data/zone_id.csv") |>
-  mutate(name = paste0("z", id)) 
+  mutate(name = paste0("z", id))
 
 # FEATURE TARGETS
 names <- readRDS("data/SpeciesData/SDMNameMatching.rds") |>
@@ -266,9 +266,4 @@ targs_join <- targs |>
   dplyr::select(species, target) |>
   mutate(species = as.numeric(species))
 write_csv(targs_join, "data/formatted-data/targets_split_formatted.csv")
-
-  
-# pu, feature, amount, zone
-# pu, feature, target, zones(all)
-# take current target and percentage in a place
 

@@ -9,11 +9,11 @@ rm(list = ls())
 
 ############## Planning unit costs per zone #############
 # read in zone data
-zone_id <- read_csv("data/formatted-data/zone_id.csv") 
+zone_id <- read_csv("data/formatted-data/zone_id.csv")
 all_zones <- paste0("z", zone_id$id)
 
 # Create a value of cost = 1 (area) for each PU
-PU_template <- st_read("data/formatted-data/PU_template.shp") 
+PU_template <- st_read("data/formatted-data/PU_template.shp")
 raster <- raster("data/landcover/10km/Corine_2018_cropland.tif")
 
 # make it into a raster
@@ -32,14 +32,14 @@ names(PU_zones_cost) <- all_zones
 # format and export for problem
 PU_zones_cost <- as.data.frame(PU_zones_cost)
 
-pu_costs_data_format <- 
+pu_costs_data_format <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(PU_zones_cost))) |>
   dplyr::select(-id) |>
   rename(pu = layer) |>
@@ -64,7 +64,7 @@ pasture <- read_csv("data/production_targets/EUPasture__primes_MIX55_V2GHG_CO2_1
 # crpland_mgmt <- read_csv("data/2030_CrpLndMgmt_FitFor55Scenario_11Aug2022.csv") |>
 #   group_by(NUTS2, ALLTECH) |>
 #   summarise(area = sum(value)) |> ungroup()|>
-#   rename(NUTS_ID = NUTS2) 
+#   rename(NUTS_ID = NUTS2)
 
 crpland_mgmt <- read_csv("data/production_targets/EUCropland__primes_MIX55_V2GHG_CO2_10_FIX_BLTrd_ver3.csv") |>
   #read_csv("data/prod_constraints/EUCropland__primes_MIX55_V2GHG_CO2_10_ver2.csv") |>
@@ -122,8 +122,8 @@ writeRaster(nuts2_raster, "data/formatted-data/nuts2_raster.tif", overwrite = TR
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
 ############## bioregion constraints ##########
-############## 
-# 
+##############
+#
 # # Get NUTS2 jurisdiction data per planning unit and make a binary stack
 # bioregion <- st_read("data/EU_BiogeoRegions2016_shapefile/BiogeoRegions2016.shp") |>
 #   rename(BR_ID = short_name) |>
@@ -137,28 +137,28 @@ pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 # names(BR_raster) <- "BR_ID"
 # plot(BR_raster)
 # writeRaster(BR_raster, "data/formatted-data/BR_raster.tif", overwrite = TRUE)
-# 
+#
 # # filter out PU outside of the EU
-# pu_in_EU_BR <- 
+# pu_in_EU_BR <-
 #   ### add in indices for planning units in raster to be organized
 #   ### not totally necessary bc we will use PUID to reduce PU
 #   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
 #   ### add in cost data
 #   mutate(cost = 1) %>%
-#   ### add in PUID  
+#   ### add in PUID
 #   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-#   ### add in SPP potential data  
-#   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |> 
-#   bind_cols(as_tibble(raster::as.data.frame(BR_raster))) |> 
+#   ### add in SPP potential data
+#   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
+#   bind_cols(as_tibble(raster::as.data.frame(BR_raster))) |>
 #   drop_na(nuts2id) |>
 #   rename(pu = layer) |> dplyr::select(-id)
-# 
+#
 # bionames <- as_tibble(bioregion) |> dplyr::select(-geometry) |>
 #   mutate(BR_ID = BRIDnum)
-# 
+#
 # pu_in_EU_BR |> group_by(BR_ID) |> count() |> full_join(bionames)
 # # add a new id for problem formatting
-# 
+#
 # pu_in_EU_BR |>
 #   mutate(EU_id = seq(1:nrow(pu_in_EU_BR))) |>
 #   dplyr::select(-cost) |>
@@ -166,7 +166,7 @@ pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
 #### Pasture low #####
 
-nuts_pasture_low <- pasture |> 
+nuts_pasture_low <- pasture |>
   filter(name == "pasture_low")
 write_csv(nuts_pasture_low, "data/formatted-data/linear_constraints/nuts_pasture_low_55.csv")
 
@@ -180,17 +180,17 @@ for (i in nums$id) {
   budget_pasture_low_data[[i]] <- budget_pasture_low_data[[i]] * 0
 }
 
-pu_pasture_low_budget_data <- 
+pu_pasture_low_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_pasture_low_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -199,13 +199,13 @@ pu_pasture_low_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_pasture_low_budget_data, 
+write_csv(pu_pasture_low_budget_data,
           "data/formatted-data/linear_constraints/pu_pasture_low_budget_data_55.csv")
 
 ### Pasture high ###
 
-nuts_pasture_high <- pasture|> 
-  filter(name == "pasture_high") 
+nuts_pasture_high <- pasture|>
+  filter(name == "pasture_high")
 write_csv(nuts_pasture_high, "data/formatted-data/linear_constraints/nuts_pasture_high_55.csv")
 
 budget_pasture_high_data <- PU_zones_cost
@@ -217,17 +217,17 @@ for (i in nums$id) {
   budget_pasture_high_data[[i]] <- budget_pasture_high_data[[i]] * 0
 }
 
-pu_pasture_high_budget_data <- 
+pu_pasture_high_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_pasture_high_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -236,13 +236,13 @@ pu_pasture_high_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_pasture_high_budget_data, 
+write_csv(pu_pasture_high_budget_data,
           "data/formatted-data/linear_constraints/pu_pasture_high_budget_data_55.csv")
 
 #### Crop high ###
 
-nuts_crop_high <- crpland_mgmt |> 
-  filter(name == "IntenseCropland") 
+nuts_crop_high <- crpland_mgmt |>
+  filter(name == "IntenseCropland")
 write_csv(nuts_crop_high, "data/formatted-data/linear_constraints/nuts_crop_high_55.csv")
 
 budget_crop_high_data <- PU_zones_cost
@@ -254,17 +254,17 @@ for (i in nums$id) {
   budget_crop_high_data[[i]] <- budget_crop_high_data[[i]] * 0
 }
 
-pu_crop_high_budget_data <- 
+pu_crop_high_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_crop_high_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -273,13 +273,13 @@ pu_crop_high_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_crop_high_budget_data, 
+write_csv(pu_crop_high_budget_data,
           "data/formatted-data/linear_constraints/pu_crop_high_budget_data_55.csv")
 
 ##### crop medium ###
 
-nuts_crop_med <- crpland_mgmt |> 
-  filter(name == "LightCropland") 
+nuts_crop_med <- crpland_mgmt |>
+  filter(name == "LightCropland")
 write_csv(nuts_crop_med, "data/formatted-data/linear_constraints/nuts_crop_med_55.csv")
 
 budget_crop_med_data <- PU_zones_cost
@@ -292,17 +292,17 @@ for (i in nums$id) {
   budget_crop_med_data[[i]] <- budget_crop_med_data[[i]] * 0
 }
 
-pu_crop_med_budget_data <- 
+pu_crop_med_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_crop_med_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -311,14 +311,14 @@ pu_crop_med_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_crop_med_budget_data, 
+write_csv(pu_crop_med_budget_data,
           "data/formatted-data/linear_constraints/pu_crop_med_budget_data_55.csv")
 
 
 # crop low
 
-nuts_crop_low <- crpland_mgmt |> 
-  filter(name == "MinimalCropland") 
+nuts_crop_low <- crpland_mgmt |>
+  filter(name == "MinimalCropland")
 write_csv(nuts_crop_low, "data/formatted-data/linear_constraints/nuts_crop_low_55.csv")
 
 budget_crop_low_data <- PU_zones_cost
@@ -331,17 +331,17 @@ for (i in nums$id) {
   budget_crop_low_data[[i]] <- budget_crop_low_data[[i]] * 0
 }
 
-pu_crop_low_budget_data <- 
+pu_crop_low_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_crop_low_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -350,12 +350,12 @@ pu_crop_low_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_crop_low_budget_data, 
+write_csv(pu_crop_low_budget_data,
           "data/formatted-data/linear_constraints/pu_crop_low_budget_data_55.csv")
 
 # forestry - primary
-nuts_forest_pri <- forestry |> 
-  filter(name == "WoodlandForest_primary") 
+nuts_forest_pri <- forestry |>
+  filter(name == "WoodlandForest_primary")
 write_csv(nuts_forest_pri, "data/formatted-data/linear_constraints/nuts_forest_pri_55.csv")
 
 budget_forest_pri_data <- PU_zones_cost
@@ -368,17 +368,17 @@ for (i in nums$id) {
   budget_forest_pri_data[[i]] <- budget_forest_pri_data[[i]] * 0
 }
 
-pu_forest_pri_budget_data <- 
+pu_forest_pri_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_forest_pri_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -387,13 +387,13 @@ pu_forest_pri_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_forest_pri_budget_data, 
+write_csv(pu_forest_pri_budget_data,
           "data/formatted-data/linear_constraints/pu_forest_pri_budget_data_55.csv")
 
 
 # forestry multi
-nuts_forest_multi <- forestry |> 
-  filter(name == "WoodlandForest_multi") 
+nuts_forest_multi <- forestry |>
+  filter(name == "WoodlandForest_multi")
 write_csv(nuts_forest_multi, "data/formatted-data/linear_constraints/nuts_forest_multi_55.csv")
 
 budget_forest_multi_data <- PU_zones_cost
@@ -406,17 +406,17 @@ for (i in nums$id) {
   budget_forest_multi_data[[i]] <- budget_forest_multi_data[[i]] * 0
 }
 
-pu_forest_multi_budget_data <- 
+pu_forest_multi_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_forest_multi_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -425,12 +425,12 @@ pu_forest_multi_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_forest_multi_budget_data, 
+write_csv(pu_forest_multi_budget_data,
           "data/formatted-data/linear_constraints/pu_forest_multi_budget_data_55.csv")
 
 # forestry prod
-nuts_forest_prod <- forestry |> 
-  filter(name == "WoodlandForest_prod") 
+nuts_forest_prod <- forestry |>
+  filter(name == "WoodlandForest_prod")
 write_csv(nuts_forest_prod, "data/formatted-data/linear_constraints/nuts_forest_prod_55.csv")
 
 budget_forest_prod_data <- PU_zones_cost
@@ -442,17 +442,17 @@ for (i in nums$id) {
   budget_forest_prod_data[[i]] <- budget_forest_prod_data[[i]] * 0
 }
 
-pu_forest_prod_budget_data <- 
+pu_forest_prod_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_forest_prod_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -461,7 +461,7 @@ pu_forest_prod_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_forest_prod_budget_data, 
+write_csv(pu_forest_prod_budget_data,
           "data/formatted-data/linear_constraints/pu_forest_prod_budget_data_55.csv")
 
 # Add linear constraint for wetlands!
@@ -470,7 +470,7 @@ wetland_targets <- read_csv("data/wetland_restoration_targets.csv") |>
   separate(name, into = c("country", "NUTS_ID", "LC", "type")) |>
   filter(type == "Area") |>
   mutate(name = "Wetlands_natural_restore") |>
-  dplyr::select(c("NUTS_ID", "name", "value")) |> 
+  dplyr::select(c("NUTS_ID", "name", "value")) |>
   arrange(-value) |>
   mutate(country = substr(NUTS_ID, start = 1, stop = 2)) |>
   filter(country != "UK") |> dplyr::select(-country)
@@ -486,17 +486,17 @@ for (i in nums$id) {
   budget_wetland_rest_data[[i]] <- budget_wetland_rest_data[[i]] * 0
 }
 
-pu_wetland_rest_budget_data <- 
+pu_wetland_rest_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_wetland_rest_data))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(nuts2_raster))) |>
   left_join(nuts2_ID) |> dplyr::select(-nuts2id) |>
   rename(pu = layer) |>
@@ -505,7 +505,7 @@ pu_wetland_rest_budget_data <-
   drop_na(pu) |>
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
-write_csv(pu_wetland_rest_budget_data, 
+write_csv(pu_wetland_rest_budget_data,
           "data/formatted-data/linear_constraints/pu_wetland_rest_budget_data.csv")
 
 #################### set restoration budget stacks ###############
@@ -515,23 +515,23 @@ budget_restoration_data <- PU_zones_cost
 nums <- zone_id %>%
   dplyr::filter(!grepl('restore', zone)) |>
   dplyr::select(id)
-# everything not restoration * 0 
+# everything not restoration * 0
 for (i in nums$id) {
   budget_restoration_data[[i]] <- budget_restoration_data[[i]] * 0
 }
 
-pu_restoration_budget_data <- 
+pu_restoration_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
-  bind_cols(as_tibble(raster::as.data.frame(budget_restoration_data))) 
+  ### add in SPP potential data
+  bind_cols(as_tibble(raster::as.data.frame(budget_restoration_data)))
 
-write_csv(pu_restoration_budget_data, 
+write_csv(pu_restoration_budget_data,
           "data/formatted-data/linear_constraints/pu_restoration_budget_data.csv")
 
 
@@ -543,20 +543,20 @@ nums <- zone_id %>%
                 zone != "Cropland_med_restore" &
                 zone != "Pasture_low_restore") |>
   dplyr::select(id)
-# everything not restoration * 0 
+# everything not restoration * 0
 for (i in nums$id) {
   budget_restore_crop_data[[i]] <- budget_restore_crop_data[[i]] * 0
 }
 
-pu_restore_crop_budget_data <- 
+pu_restore_crop_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_restore_crop_data))) |>
   rename(pu = layer) |>
   left_join(pu_in_EU) |>
@@ -565,7 +565,7 @@ pu_restore_crop_budget_data <-
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
 
-write_csv(pu_restore_crop_budget_data, 
+write_csv(pu_restore_crop_budget_data,
           "data/formatted-data/linear_constraints/pu_restore_crop_budget_data.csv")
 
 
@@ -575,20 +575,20 @@ budget_restore_forest_data <- PU_zones_cost
 nums <- zone_id %>%
   dplyr::filter(zone != "WoodlandForest_multi_restore") |>
   dplyr::select(id)
-# everything not restoration * 0 
+# everything not restoration * 0
 for (i in nums$id) {
   budget_restore_forest_data[[i]] <- budget_restore_forest_data[[i]] * 0
 }
 
-pu_restore_forest_budget_data <- 
+pu_restore_forest_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_restore_forest_data))) |>
   rename(pu = layer) |>
   left_join(pu_in_EU) |>
@@ -597,7 +597,7 @@ pu_restore_forest_budget_data <-
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
 
-write_csv(pu_restore_forest_budget_data, 
+write_csv(pu_restore_forest_budget_data,
           "data/formatted-data/linear_constraints/pu_restore_forest_budget_data.csv")
 
 ## Natural restoration < 5%
@@ -611,20 +611,20 @@ nums <- zone_id %>%
                   # zone != "Wetlands_natural_restore" &
                   zone != "WoodlandForest_primary_restore") |>
   dplyr::select(id)
-# everything not restoration * 0 
+# everything not restoration * 0
 for (i in nums$id) {
   budget_restore_natural_data[[i]] <- budget_restore_natural_data[[i]] * 0
 }
 
-pu_restore_natural_budget_data <- 
+pu_restore_natural_budget_data <-
   ### add in indices for planning units in raster to be organized
   ### not totally necessary bc we will use PUID to reduce PU
   tibble(id = as.list(seq_len(ncell(PU_raster)))) %>%
   ### add in cost data
   mutate(cost = 1) %>%
-  ### add in PUID  
+  ### add in PUID
   bind_cols(as_tibble(raster::as.data.frame(PU_raster))) |>
-  ### add in SPP potential data  
+  ### add in SPP potential data
   bind_cols(as_tibble(raster::as.data.frame(budget_restore_natural_data))) |>
   rename(pu = layer) |>
   left_join(pu_in_EU) |>
@@ -633,12 +633,12 @@ pu_restore_natural_budget_data <-
   dplyr::select(-c(id, cost, nuts2id, EU_id))
 
 
-write_csv(pu_restore_natural_budget_data, 
+write_csv(pu_restore_natural_budget_data,
           "data/formatted-data/linear_constraints/pu_restore_natural_budget_data.csv")
 
 
 # tests
-# 
+#
 cropland1 <- read_csv("data/formatted-data/linear_constraints/nuts_crop_high_55.csv")
 cropland2 <- read_csv("data/formatted-data/linear_constraints/nuts_crop_med_55.csv")
 cropland3 <- read_csv("data/formatted-data/linear_constraints/nuts_crop_low_55.csv")
@@ -673,31 +673,31 @@ manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_const
   left_join(zones) |>
   #dplyr::select(-c(zone)) |>
   #rename(zone=name) |>
-  dplyr::select(pu, zone, lower, upper, nuts2id) 
+  dplyr::select(pu, zone, lower, upper, nuts2id)
 
 n2k_nuts2 <- manual_bounded_constraints |>   left_join(as_tibble(nuts2_all)) |> dplyr::select(-geometry) |>
   separate(zone, c('maes_label', 'intensity', 'action'), sep = "_") |>
   filter(action == "conserve" | maes_label == "Urban") |>
-  group_by(NUTS_ID) |> summarise(n2k = sum(lower)) 
+  group_by(NUTS_ID) |> summarise(n2k = sum(lower))
 
 
 conflict_nuts <- cropland1 |> dplyr::select(NUTS_ID, name, value) |>
   rbind(cropland2, cropland3,
-                   pasture1, pasture2, forestry1, forestry2) |> 
+                   pasture1, pasture2, forestry1, forestry2) |>
   group_by(NUTS_ID) |>
   summarise(value = sum(value)/10) |>
   left_join(nuts_PU) |>
   mutate(perc_prod = value/n*100) |>
   arrange(-perc_prod) |>
   left_join(n2k_nuts2) |>
-  mutate(conflict = n-(value + n2k)) |> 
+  mutate(conflict = n-(value + n2k)) |>
   arrange(conflict) |>
   filter(conflict < 0) |>
   dplyr::select(c(NUTS_ID, conflict))
 
 conflict_nuts |> arrange(NUTS_ID)
 
-  
+
 read_csv("data/formatted-data/linear_constraints/nuts_crop_high_55.csv") |>
   left_join(conflict_nuts) |> mutate(conflict = replace_na(conflict,0)) |>
   mutate(value = value+conflict) |>
@@ -748,425 +748,3 @@ read_csv("data/formatted-data/linear_constraints/nuts_pasture_high_55.csv") |>
   mutate(value = ifelse(value < 0.1, 0, value)) |>
   dplyr::select(c(NUTS_ID, name, value))|>
   write_csv("data/formatted-data/linear_constraints/nuts_pasture_high_55_adjusted.csv")
-
-# ###### refining to limit infeas - MJ loop ########
-# ###### 
-# 
-# ############ production flexibility - MJ Spain ###########
-# # Plan:
-# # Take the pasture, cropland and forestry production estimates and
-# # cap them by the maximum amount of land available in the 
-# 
-
-# 
-# pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
-# 
-# nuts2_shp <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp", quiet = TRUE) |>
-#   mutate(country = substr(NUTS2, start = 1, stop = 2)) |> 
-#   rename(NUTS_ID = NURGCDL2) |>
-#   mutate(nuts2id = seq(1:260))
-# 
-# nuts_PU <- pu_in_EU |>
-#   left_join(as_tibble(nuts2_shp)) |>
-#   group_by(NUTS_ID) |>
-#   count()
-# 
-# manbound <- read_csv("data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv") |> 
-#   left_join(zones) |>
-#   dplyr::select(pu, zone, nuts2id, lower, upper) 
-# 
-# # Manual bounded conservation constraints
-# manual_bounded_constraints_conserve <- manbound |>
-#   left_join(zones) |> 
-#   dplyr::select(-c(zone)) |>
-#   rename(zone=name) |> 
-#   filter(zone %in% zones$name[grep("conserve", zones$zone)]) |>
-#   group_by(pu) |>
-#   summarise(lower_cons = sum(lower))
-# 
-# #assertthat::assert_that(all(manual_bounded_constraints_conserve$lower_cons<1))
-# 
-# # Write a loopie
-# for(produce in grep("production", unique(manbound$zone), value = T) ){
-#   print(produce)
-#   
-#   input <- switch (produce,
-#                    "WoodlandForest_multi_production" = "data/formatted-data/linear_constraints/nuts_forest_multi_55.csv",
-#                    "WoodlandForest_prod_production" = "data/formatted-data/linear_constraints/nuts_forest_prod_55.csv",
-#                    "Pasture_high_production" = "data/formatted-data/linear_constraints/nuts_pasture_high_55.csv",
-#                    "Pasture_low_production" = "data/formatted-data/linear_constraints/nuts_pasture_low_55.csv",
-#                    "Cropland_med_production" = "data/formatted-data/linear_constraints/nuts_crop_med_55.csv",
-#                    "Cropland_low_production" = "data/formatted-data/linear_constraints/nuts_crop_low_55.csv",
-#                    "Cropland_high_production" = "data/formatted-data/linear_constraints/nuts_crop_high_55.csv"
-#   )
-#   #input = "data/formatted-data/linear_constraints/nuts_crop_low_ref.csv"
-#   f <- read.csv(input)
-#   
-#   target <- manbound |> as_tibble() |>
-#     filter(zone == produce) |>
-#     left_join(manual_bounded_constraints_conserve) |>
-#     mutate(lower_cons = replace_na(lower_cons, 0))|>
-#     mutate(upper = replace_na(upper, 0)) |>
-#     #filter(nuts2id %in% a$nuts2id) |> 
-#     group_by(nuts2id) |>
-#     summarise(upper = ifelse(sum((upper-lower_cons))<0,0,sum((upper-lower_cons))) *10) |> 
-#     left_join(nuts2_shp) |>
-#     dplyr::select(-geometry) |>
-#     left_join(f) |> 
-#     mutate(difference = upper - value) |>
-#     rename(new = value) |>
-#     dplyr::select(NUTS_ID, upper, new, difference) |>
-#     arrange(-difference) |>
-#     mutate(name = unique(f$name),
-#            value = ifelse(difference>0, new*0.95, upper*0.95)) |>
-#     left_join(nuts_PU) |> 
-#     dplyr::select(NUTS_ID,name,value) 
-#   
-#   new <- target
-#   write_csv(new, paste0(tools::file_path_sans_ext(input),"_l2.csv"))
-# }
-# 
-# sum(read_csv("data/formatted-data/linear_constraints/nuts_crop_high_55.csv")$value)/10
-# 
-# ##### bit more refining for spain
-# 
-# problematic_nutsregions <- c("ES22", "ES23", "ES41", "ES43")
-# a <- nuts2_shp |> filter(NUTS_ID %in% problematic_nutsregions)
-# 
-# ok <- manbound |> filter(nuts2id != a$nuts2id)
-# check <- manbound |> filter(nuts2id == a$nuts2id)
-# 
-# # Write a loopie
-# for(produce in grep("production", unique(manbound$zone), value = T) ){
-#   print(produce)
-#   
-#   input <- switch (produce,
-#                    "WoodlandForest_multi_production" = "data/formatted-data/linear_constraints/nuts_forest_multi_55_l2.csv",
-#                    "WoodlandForest_prod_production" = "data/formatted-data/linear_constraints/nuts_forest_prod_55_l2.csv",
-#                    "Pasture_high_production" = "data/formatted-data/linear_constraints/nuts_pasture_high_55_l2.csv",
-#                    "Pasture_low_production" = "data/formatted-data/linear_constraints/nuts_pasture_low_55_l2.csv",
-#                    "Cropland_med_production" = "data/formatted-data/linear_constraints/nuts_crop_med_55_l2.csv",
-#                    "Cropland_low_production" = "data/formatted-data/linear_constraints/nuts_crop_low_55_l2.csv",
-#                    "Cropland_high_production" = "data/formatted-data/linear_constraints/nuts_crop_high_55_l2.csv"
-#   )
-#   f <- read.csv(input)
-#   
-#   target <- manbound |> as_tibble() |>
-#     filter(zone == produce) |>
-#     left_join(manual_bounded_constraints_conserve) |>
-#     mutate(lower_cons = replace_na(lower_cons, 0))|>
-#     filter(nuts2id %in% a$nuts2id) |> 
-#     group_by(nuts2id) |>
-#     summarise(upper = ifelse(sum((upper-lower_cons))<0,0,sum((upper-lower_cons))) *10) |> 
-#     left_join(nuts2_shp) |>
-#     dplyr::select(-geometry) |>
-#     left_join(f) |> mutate(difference = upper - value) |>
-#     rename(new = value) |>
-#     dplyr::select(NUTS_ID, upper, new, difference) |>
-#     arrange(-difference) |>
-#     mutate(name = unique(f$name),
-#            value = ifelse(difference>0, new*0.7, upper*0.7)) |>
-#     dplyr::select(NUTS_ID,name,value) |> arrange(-value)
-#   
-#   new <- bind_rows(target, f |> filter(!NUTS_ID %in% problematic_nutsregions))
-#   write_csv(new, paste0(tools::file_path_sans_ext(input),"_ESTuned.csv"))
-# }
-# 
-# 
-# ##### bit more refining for forestry
-# 
-# problematic_nutsregions <- c("ES22", "ES23", "ES41", "ES43")
-# a <- nuts2_shp |> filter(NUTS_ID %in% problematic_nutsregions)
-# 
-# ok <- manbound |> filter(nuts2id != a$nuts2id)
-# check <- manbound |> filter(nuts2id == a$nuts2id)
-# 
-# # Write a loopie
-# 
-# f <- read.csv("data/formatted-data/linear_constraints/nuts_forest_prod_55_l2_ESTuned.csv")
-# 
-# target <- manbound |> as_tibble() |>
-#   filter(zone == produce) |>
-#   left_join(manual_bounded_constraints_conserve) |>
-#   mutate(lower_cons = replace_na(lower_cons, 0))|>
-#   # filter(nuts2id %in% a$nuts2id) |> 
-#   group_by(nuts2id) |>
-#   summarise(upper = ifelse(sum((upper-lower_cons))<0,0,sum((upper-lower_cons))) *10) |> 
-#   left_join(nuts2_shp) |>
-#   dplyr::select(-geometry) |>
-#   left_join(f) |> mutate(difference = upper - value) |>
-#   rename(new = value) |>
-#   dplyr::select(NUTS_ID, upper, new, difference) |>
-#   arrange(-difference) |>
-#   mutate(name = unique(f$name),
-#          value = ifelse(difference>0, new*0.9, upper*0.9)) |>
-#   dplyr::select(NUTS_ID,name,value) |> arrange(-value)
-# 
-# new <- target#bind_rows(target, f |> filter(!NUTS_ID %in% problematic_nutsregions))
-# write_csv(new,"data/formatted-data/linear_constraints/nuts_forest_prod_55_l_ESTuned3.csv")
-# 
-# 
-# 
-# ########## refining constraints to limit infeasibilities  ########## 
-# 
-# pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
-# 
-# pu <- read_fst("data/formatted-data/pu_data.fst") |>
-#   left_join(pu_in_EU) |>
-#   rename(id = EU_id) |>
-#   dplyr::select(-c(pu, nuts2id)) |>
-#   drop_na(id)
-# 
-# zones <- read_csv("data/formatted-data/zone_id.csv") |>
-#   mutate(name = paste0("z", id)) 
-# 
-# manual_bounded_constraints <- 
-#   read_csv("data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv") |>
-#   #rename(pu = PUID) |>
-#   # left_join(pu_in_EU) |>
-#   # drop_na(EU_id) |>
-#   # mutate(pu = EU_id) |>
-#   # left_join(zones) |> 
-#   # #dplyr::select(-c(zone)) |>
-#   # #rename(zone=name) |>
-#   dplyr::select(pu, zone, lower, upper, nuts2id) #|>
-#   # drop_na() #|>
-#   # mutate(lower = ifelse(zone == "z8", 0, lower), # wetland restore
-#   #        lower = ifelse(zone == "z5", 0, lower)) |> # marin transitional restore
-#   # mutate(upper = ifelse(zone == "z8", 0, upper),
-#   #        upper = ifelse(zone == "z5", 0, upper)) 
-# 
-
-# manual_bounded_constraints_conserve <- manual_bounded_constraints |>
-#   left_join(zones) |> 
-#   dplyr::select(-c(zone)) |>
-#   rename(zone=name) |> 
-#   filter(zone %in% c("z19", "z20", "z21", "z22", "z23", "z24", "z25", "z25")) |>
-#   group_by(pu) |>
-#   summarise(lower_cons = sum(lower))
-# hist(manual_bounded_constraints_conserve$lower_cons)
-# 
-# ########## forestry production limited
-# ########## 
-# 
-# forestry <- read_csv("data/formatted-data/linear_constraints/nuts_forest_prod_55.csv")
-# #forestry <- read_csv("data/formatted-data/linear_constraints/nuts_forest_prod.csv")
-# 
-# forestry_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "WoodlandForest_prod_production") |>
-#   left_join(manual_bounded_constraints_conserve) |>
-#   mutate(lower_cons = replace_na(lower_cons,0))|>
-#   group_by(nuts2id) |>
-#   summarise(upper = ifelse(sum((upper-lower_cons))<0,0,sum((upper-lower_cons))) *10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(forestry) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(-difference) |>
-#   mutate(name = "WoodlandForest_prod",
-#          value = ifelse(difference>0, G4M*0.9,
-#                         upper*0.9)) |>
-#   #mutate(value = ifelse(upper*0.9 < value, upper*0.9, value)) |>
-#   dplyr::select(NUTS_ID,name,value) |> arrange(-value)
-# 
-# sum(forestry_nuts$value, na.rm = TRUE)/10
-# sum(forestry$value)/10
-# 
-# ########## cropland production limited ########## 
-# 
-# croplandhigh <- read_csv("data/formatted-data/linear_constraints/nuts_crop_high.csv")
-# 
-# crophigh_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "Cropland_high_production") |>
-#   left_join(manual_bounded_constraints_conserve) |>
-#   mutate(lower_cons = replace_na(lower_cons,0))|>
-#   group_by(nuts2id) |>
-#   summarise(upper = ifelse(sum(upper-lower_cons)<0,0,sum(upper-lower_cons)) *10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(croplandhigh) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "IntenseCropland",
-#          value = ifelse(difference>0, G4M*.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# 
-# sum(crophigh_nuts$value, na.rm=TRUE)/10
-# sum(croplandhigh$value, na.rm=TRUE)/10
-# 
-# write_csv(crophigh_nuts, "data/formatted-data/linear_constraints/nuts_crop_high_55_l.csv")
-# 
-# 
-# # mid 
-# croplandmed <- read_csv("data/formatted-data/linear_constraints/nuts_crop_med.csv")
-# 
-# 
-# cropmed_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "Cropland_med_production" |
-#            zone == "Cropland_med_restore") |>
-#   left_join(manual_bounded_constraints_conserve) |>
-#   mutate(lower_cons = replace_na(lower_cons,0))|>
-#   group_by(nuts2id) |>
-#   summarise(upper = sum(upper)*10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(croplandmed) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "LightCropland",
-#          value = ifelse(difference>0, G4M*0.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# sum(cropmed_nuts$value, na.rm=TRUE)/10
-# sum(croplandmed$value, na.rm=TRUE)/10
-# 
-# write_csv(cropmed_nuts, "data/formatted-data/linear_constraints/nuts_crop_med_55_l.csv")
-# 
-# # low
-# 
-# croplandlow <- read_csv("data/formatted-data/linear_constraints/nuts_crop_low.csv")
-# 
-# croplow_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "Cropland_low_production" |
-#            zone == "Cropland_low_restore") |>
-#   group_by(nuts2id) |>
-#   summarise(upper = sum(upper)*10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(croplandlow) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "MinimalCropland",
-#          value = ifelse(difference>0, G4M*0.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# 
-# sum(croplow_nuts$value, na.rm=TRUE)/10
-# 
-# write_csv(croplow_nuts, "data/formatted-data/linear_constraints/nuts_crop_low_55_l.csv")
-# 
-# 
-# # pasture low
-# 
-# pasturelow <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_low.csv")
-# 
-# pasturelow_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "Pasture_low_production" |
-#            zone == "Pasture_low_restore") |>
-#   group_by(nuts2id) |>
-#   summarise(upper = sum(upper, na.rm= TRUE)*10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(pasturelow) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "pasture_low",
-#          value = ifelse(difference>0, G4M*0.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# sum(pasturelow$value, na.rm=TRUE)/10
-# 
-# write_csv(pasturelow_nuts, "data/formatted-data/linear_constraints/nuts_pasture_low_55_l.csv")
-# 
-# 
-# # pasture high
-# 
-# pasturehigh <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_high.csv")
-# 
-# pasturehigh_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "Pasture_high_production") |>
-#   left_join(manual_bounded_constraints_conserve) |>
-#   mutate(lower_cons = replace_na(lower_cons,0),
-#          upper = replace_na(upper,0))|>
-#   group_by(nuts2id) |>
-#   summarise(upper = ifelse(sum(upper-lower_cons)<0,0,sum(upper-lower_cons)) *10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(pasturehigh) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "pasture_high",
-#          value = ifelse(difference>0, G4M*0.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# sum(pasturehigh$value,na.rm=TRUE)/10
-# write_csv(pasturehigh_nuts, "data/formatted-data/linear_constraints/nuts_pasture_high_55_l.csv")
-# 
-# # forestry multi
-# 
-# forestry_multi <- read_csv("data/formatted-data/linear_constraints/nuts_forest_multi.csv")
-# 
-# forestrymulti_nuts <- manual_bounded_constraints |> as_tibble() |>
-#   filter(zone == "WoodlandForest_multi_production" |
-#            zone == "WoodlandForest_multi_restore" ) |>
-#   group_by(nuts2id) |>
-#   summarise(upper = sum(upper, na.rm= TRUE)*10) |> 
-#   left_join(nuts2_all) |>
-#   dplyr::select(-geometry) |>
-#   left_join(forestry_multi) |> mutate(difference = upper - value) |>
-#   rename(G4M = value) |>
-#   dplyr::select(NUTS_ID, upper, G4M, difference) |>
-#   arrange(difference) |>
-#   mutate(name = "WoodlandForest_multi",
-#          value = ifelse(difference>0, G4M*0.98,
-#                         upper*0.95)) |>
-#   dplyr::select(NUTS_ID,name,value)
-# 
-# write_csv(forestrymulti_nuts, "data/formatted-data/linear_constraints/nuts_forest_multi_55_l.csv")
-# 
-# 
-# ##### bit more refining for spain
-# 
-# problematic_nutsregions <- c("ES22", "ES23", "ES41", "ES43")
-# a <- nuts2_shp |> filter(NUTS_ID %in% problematic_nutsregions)
-# 
-# ok <- manbound |> filter(nuts2id != a$nuts2id)
-# check <- manbound |> filter(nuts2id == a$nuts2id)
-# 
-# # Write a loopie
-# for(produce in grep("production", unique(manbound$zone), value = T) ){
-#   print(produce)
-#   
-#   input <- switch (produce,
-#                    "WoodlandForest_multi_production" = "data/formatted-data/linear_constraints/nuts_forest_multi_ref_l.csv",
-#                    "WoodlandForest_prod_production" = "data/formatted-data/linear_constraints/nuts_forest_prod_ref_l.csv",
-#                    "Pasture_high_production" = "data/formatted-data/linear_constraints/nuts_pasture_high_ref_l.csv",
-#                    "Pasture_low_production" = "data/formatted-data/linear_constraints/nuts_pasture_low_ref_l.csv",
-#                    "Cropland_med_production" = "data/formatted-data/linear_constraints/nuts_crop_med_ref_l.csv",
-#                    "Cropland_low_production" = "data/formatted-data/linear_constraints/nuts_crop_low_ref_l.csv",
-#                    "Cropland_high_production" = "data/formatted-data/linear_constraints/nuts_crop_high_ref_l.csv"
-#   )
-#   f <- read.csv(input)
-#   
-#   target <- manbound |> as_tibble() |>
-#     filter(zone == produce) |>
-#     left_join(manual_bounded_constraints_conserve) |>
-#     mutate(lower_cons = replace_na(lower_cons, 0))|>
-#     filter(nuts2id %in% a$nuts2id) |> 
-#     group_by(nuts2id) |>
-#     summarise(upper = ifelse(sum((upper-lower_cons))<0,0,sum((upper-lower_cons))) *10) |> 
-#     left_join(nuts2_shp) |>
-#     dplyr::select(-geometry) |>
-#     left_join(f) |> mutate(difference = upper - value) |>
-#     rename(new = value) |>
-#     dplyr::select(NUTS_ID, upper, new, difference) |>
-#     arrange(-difference) |>
-#     mutate(name = unique(f$name),
-#            value = ifelse(difference>0, new*0.95, upper*0.75)) |>
-#     dplyr::select(NUTS_ID,name,value) |> arrange(-value)
-#   
-#   new <- bind_rows(target, f |> filter(!NUTS_ID %in% problematic_nutsregions))
-#   write_csv(new, paste0(tools::file_path_sans_ext(input),"_ESTuned.csv"))
-# }
-# 
-
-
-# mutat
-  
