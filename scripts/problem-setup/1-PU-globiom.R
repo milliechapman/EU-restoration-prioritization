@@ -114,7 +114,6 @@ testn <- PU_natura_globiom_lc |>
 write_csv(PU_globiom_lc, "data/outputs/1-PU/PU_globiom_lc.csv")
 
 
-
 # Binary potential by PU
 filelist_temp <- list.files("data/PotentialMAES/", pattern = "PotentialMAES__median_*")[1:6]
 PotentialMAES <- rast(paste0("data/PotentialMAES/", filelist_temp))

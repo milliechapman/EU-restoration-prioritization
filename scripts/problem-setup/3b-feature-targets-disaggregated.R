@@ -172,6 +172,7 @@ if(apply_initialglobiom){
 } else {
   of <- "data/formatted-data/targets_split.csv"
 }
+
 targets_split |>
   bind_rows(carbon_target) |>
   mutate(sense = ">=",
@@ -296,4 +297,3 @@ write_csv(targs_join, of)
 # pu, feature, amount, zone
 # pu, feature, target, zones(all)
 # take current target and percentage in a place
-

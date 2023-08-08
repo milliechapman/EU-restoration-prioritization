@@ -118,7 +118,6 @@ if(apply_initialglobiom){
   assertthat::assert_that(
     round(terra::global(rast(nuts2_globiom_crop_total),fun = "max",na.rm = TRUE)[,1],3) == 1
   )
-
   # Assign flat shares
   crop_high_perc <- nuts2_globiom_crop_high
   crop_mid_perc <- nuts2_globiom_crop_mid
@@ -142,8 +141,8 @@ if(apply_initialglobiom){
   initial <-  read.csv("data/ManagementInitialConditions/EUPasture__2020primes_ref_2020REFERENCE_ver3.csv") |>
     dplyr::select(NUTS2, Intensity, area_1000ha) |>
     dplyr::mutate(Intensity = forcats::fct_collapse(Intensity,
-                                                            "pasture_low_globiom" = "LowIntensityPasture",
-                                                            "pasture_high_globiom" = "HighIntensityPasture"
+                                                    "pasture_low_globiom" = "LowIntensityPasture",
+                                                    "pasture_high_globiom" = "HighIntensityPasture"
     )) |>
     dplyr::group_by(NUTS2, Intensity) |>
     dplyr::summarise(area_1000ha = sum(area_1000ha,na.rm=T)) |> dplyr::ungroup() |>
@@ -209,7 +208,7 @@ PU_intensity_pasture <- PU_template |>
 PU_intensity_pasture <- as_tibble(PU_intensity_pasture) |>
   dplyr::select(-geometry)
 
-PU_intensity_crop <- PU_template |>
+ PU_intensity_crop <- PU_template |>
   mutate(crop_high_perc = exactextractr::exact_extract(crop_high_perc, PU_template, 'mean'),
          crop_low_perc = exactextractr::exact_extract(crop_low_perc, PU_template, 'mean'),
          crop_mid_perc = exactextractr::exact_extract(crop_mid_perc, PU_template, 'mean'))
@@ -241,30 +240,30 @@ PU_natura_lc <- PU_natura_lc |>
   #        forests_production_perc = forests_production_perc + perc_primary/2) |>
   # mutate(WoodlandForest = WoodlandForest_NP) |>
   mutate(#WoodlandForest_primary = PrimaryForest,
-         WoodlandForest_setaside = ifelse(all_forests > 0,
-                                         WoodlandForest*forests_setaside_perc,
-                                         WoodlandForest*0.3),
-         WoodlandForest_multi = ifelse(all_forests > 0,
-                                       WoodlandForest*forests_multi_perc,
-                                       WoodlandForest*0.3),
-         WoodlandForest_prod = ifelse(all_forests > 0,
-                                      WoodlandForest*forests_production_perc,
-                                      WoodlandForest*0.4),
-         Cropland_low = ifelse(all_crop > 0,
-                               Cropland*crop_low_perc,
-                               0),
-         Cropland_med = ifelse(all_crop > 0,
-                               Cropland*crop_mid_perc,
-                               0),
-         Cropland_high = ifelse(all_crop > 0,
-                                Cropland*crop_high_perc,
-                                Cropland),
-         Pasture_low = ifelse(all_pasture > 0,
-                              Pasture*pasture_low_perc,
-                              Pasture*0.5),
-         Pasture_high = ifelse(all_pasture > 0,
-                               Pasture*pasture_high_perc,
-                               Pasture*0.5)) |>
+    WoodlandForest_setaside = ifelse(all_forests > 0,
+                                     WoodlandForest*forests_setaside_perc,
+                                     WoodlandForest*0.3),
+    WoodlandForest_multi = ifelse(all_forests > 0,
+                                  WoodlandForest*forests_multi_perc,
+                                  WoodlandForest*0.3),
+    WoodlandForest_prod = ifelse(all_forests > 0,
+                                 WoodlandForest*forests_production_perc,
+                                 WoodlandForest*0.4),
+    Cropland_low = ifelse(all_crop > 0,
+                          Cropland*crop_low_perc,
+                          0),
+    Cropland_med = ifelse(all_crop > 0,
+                          Cropland*crop_mid_perc,
+                          0),
+    Cropland_high = ifelse(all_crop > 0,
+                           Cropland*crop_high_perc,
+                           Cropland),
+    Pasture_low = ifelse(all_pasture > 0,
+                         Pasture*pasture_low_perc,
+                         Pasture*0.5),
+    Pasture_high = ifelse(all_pasture > 0,
+                          Pasture*pasture_high_perc,
+                          Pasture*0.5)) |>
   # mutate(WoodlandForest_primary = WoodlandForest_primary + WoodlandForest_setaside) |>
   dplyr::select(-c(Pasture, Cropland, WoodlandForest, # WoodlandForest_NP,
                    #WoodlandForest_setaside,
@@ -282,7 +281,10 @@ PU_natura_lc <- PU_natura_lc |>
                    pasture_low_perc, pasture_high_perc,
                    crop_high_perc, crop_mid_perc, crop_low_perc,
                    #area
-                   ))
+  ))
+
+# Write output
+write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity.csv")
 
 ## LULC for PU overall (proportion from 100m data)
 PU_lc <- PU_lc  |>
@@ -331,7 +333,7 @@ PU_lc <- PU_lc  |>
                    pasture_low_perc, pasture_high_perc,
                    crop_high_perc, crop_mid_perc, crop_low_perc#,
                    #area
-                   ))
+  ))
 
 # ------- #
 # Further error checks here
@@ -379,15 +381,11 @@ restoration_logic <- read_csv("data/restoration-transitions.csv")
 
 ############## (1) Conservation #################################
 ## lower - LC area already in n2k
-if(apply_initialglobiom){
-  PU_natura_lc <- read_csv("data/outputs/2-zones/PU_natura_lc_intensity_initialGLOBIOM.csv") |>
-    drop_na(PUID)
-  PU_lc <- read_csv("data/outputs/2-zones/PU_lc_intensity_initialGLOBIOM.csv")
-} else {
-  PU_natura_lc <- read_csv("data/outputs/2-zones/PU_natura_lc_intensity.csv") |>
-    drop_na(PUID)
-  PU_lc <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv")
-}
+
+PU_natura_lc <- read_csv("data/outputs/2-zones/PU_natura_lc_intensity.csv") |>
+   drop_na(PUID)
+PU_lc <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv")
+
 PU_potential_lc <- read_csv("data/outputs/2-zones/PU_potential_lc_intensity.csv")
 
 assertthat::assert_that(sum(PU_natura_lc$WoodlandForest_primary, na.rm = TRUE)>100)
@@ -400,7 +398,7 @@ conservation_lower <- PU_natura_lc |>
   mutate(zone = paste0(zone, "_conserve")) |>
   rename(lower = value) |>
   mutate(lower = ifelse(lower <0,0, lower)) #|>
- # mutate(lower = lower/10000)
+# mutate(lower = lower/10000)
 # low is the area in n2k
 
 ## LC area in total planning unit is upper limit
@@ -411,7 +409,7 @@ conservation_upper <- PU_lc |>
   rename(zone = name) |>
   mutate(zone = paste0(zone, "_conserve")) |>
   rename(upper = value)# |>
- # mutate(upper = upper/10000)
+# mutate(upper = upper/10000)
 
 # Upper larger than lower?
 assertthat::assert_that(sum(conservation_lower$lower, na.rm = TRUE)<=sum(conservation_upper$upper, na.rm = TRUE))
@@ -557,41 +555,6 @@ pasture_bounds_high <-lc_all |>
   mutate(zone = "Pasture_high_production")
 hist(pasture_bounds_high$upper)
 
-## LC inside PA (to exclude from upper limit)
-# lc_n2k_forests <- PU_natura_lc |>
-#   dplyr::select(-c(Status)) |>
-#   pivot_longer(-PUID) |>
-#   mutate(place = "n2k") |>
-#   filter(name == "WoodlandForest_multi"|
-#          name == "WoodlandForest_prod"|
-#          name == "WoodlandForest_primary") |>
-#   group_by(PUID) |>
-#   summarize(area_protected = sum(value, na.rm = TRUE))# cropland and pastureland not part of upper limit
-#
-# hist(lc_n2k_forests$area_protected)
-
-## LC full PUT
-# lc_all_forests <- PU_lc |>
-#   dplyr::select(-c(Status)) |>
-#   pivot_longer(-PUID) |>
-#   mutate(place = "all") |>
-#   filter(name == "WoodlandForest_multi"|
-#            name == "WoodlandForest_prod"|
-#            name == "WoodlandForest_primary") |>
-#   group_by(PUID) |>
-#   summarise(landarea = ifelse(sum(value, na.rm = TRUE)>10000,10000,sum(value, na.rm = TRUE)))
-# hist(lc_all_forests$landarea)
-#
-# forestry_bounds <- lc_all_forests |>
-#   #left_join(lc_n2k_forests) |>
-#   #left_join(PU_potential_lc, by = "PUID") |>
-#   mutate(upper = landarea*1.1) |>
-#   mutate(upper = ifelse(upper > 10000, 10000, upper)) |>
-#   mutate(upper = ifelse(upper <0,0,upper)) |>
-#   mutate(lower = 0) |> dplyr::select(-c(landarea)) |>
-#   mutate(zone = "WoodlandForest_prod_production")
-
-
 forestry_bounds <- lc_all |>
   left_join(lc_n2k) |> left_join(PU_lc) |>
   mutate(upper = WoodlandForest_prod*1.5) |> #(Pasture_low + Pasture_high)*1.1) |>
@@ -607,12 +570,11 @@ forestry_multi_bounds <- conservation_lower |>
   filter(zone == "WoodlandForest_multi_conserve") |>
   mutate(zone = ifelse(zone ==  "WoodlandForest_multi_conserve", "WoodlandForest_multi_production", NA)) |>
   mutate(upper = ifelse(upper>1,1,upper)) |>
-           mutate(upper = upper)
+  mutate(upper = upper)
 hist(forestry_multi_bounds$upper)
 
 forestry_prod_bounds <- forestry_bounds |>
   mutate(zone = "WoodlandForest_prod_production")
-
 
 production_bounds <- rbind(forestry_multi_bounds,
                            forestry_prod_bounds,
@@ -648,40 +610,21 @@ manual_bounded_constraints <- rbind(restore_all,
                                     production_bounds,
                                     conservation_bounds,
                                     urban_lockin
-                                    ) |>
+) |>
   mutate(upper = ifelse(upper <0,0, upper)) |>
-  mutate(upper = ifelse(upper >1,1, upper)) #|>
- # mutate(lower = ifelse(lower<0.01, lower, lower-0.01))
-  # mutate(lower = round(lower, 2)) |>
-  # mutate(upper = round(upper, 2))
+  mutate(upper = ifelse(upper >1,1, upper))
 
 manual_bounded_constraints |>
   ggplot(aes(x = upper)) + geom_histogram() +
   facet_wrap(~zone) + theme_classic()
 
-unique(manual_bounded_constraints$zone)
-if(apply_initialglobiom){
-  write_csv(manual_bounded_constraints, "data/formatted-data/manual_bounded_constraints_production_globiom_initialGLOBIOM.csv")
-} else {
-  write_csv(manual_bounded_constraints, "data/formatted-data/manual_bounded_constraints_production_globiom.csv")
-}
 
+write_csv(manual_bounded_constraints, "data/formatted-data/manual_bounded_constraints_production_globiom.csv")
 
 ################## production flexibility ###############
 
 nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
   st_transform(crs = st_crs(rast_template))
-
-forestry <- st_read("data/production_targets/NUTS_TotalSumHa__FIT455_ver3.shp") |>
-  as_tibble() |>
-  dplyr::select(-c(geometry,NUTS2))|>
-  rename(NUTS_ID = NURGCDL,
-         WoodlandForest_prod = prdct__,
-         WoodlandForest_multi = mltfn__,
-         WoodlandForest_primary = stsd_f_) |>
-  pivot_longer(-NUTS_ID) |> mutate(value = value/100/100) |>
-  arrange(-value) |>
-  dplyr::filter(name == "WoodlandForest_prod")
 
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 #
@@ -694,11 +637,8 @@ pu <- read_fst("data/formatted-data/pu_data.fst") |>
 zones <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id))
 #
-if(apply_initialglobiom){
-  of <- "data/formatted-data/manual_bounded_constraints_production_globiom_initialGLOBIOM.csv"
-} else {
-  of <- "data/formatted-data/manual_bounded_constraints_production_globiom.csv"
-}
+of <- "data/formatted-data/manual_bounded_constraints_production_globiom.csv"
+
 manual_bounded_constraints <- read_csv(of) |>
   rename(pu = PUID) |>
   left_join(pu_in_EU) |>
@@ -709,10 +649,7 @@ manual_bounded_constraints <- read_csv(of) |>
   #rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper, nuts2id)
 
-n2k_pu <- manual_bounded_constraints |>
-  separate(zone, c('maes_label', 'intensity', 'action'), sep = "_") |>
-  filter(action == "conserve") |>
-  group_by(pu) |> summarise(n2k = sum(lower))
+write_csv(production_flex, "data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv")
 
 manual_bounded_constraints <- manual_bounded_constraints |>
   left_join(n2k_pu)
@@ -863,6 +800,7 @@ if(apply_initialglobiom){
 # write_csv(production_flex, "data/formatted-data/manual_bounded_constraints_production_flex2.csv")
 #
 # read_csv("data/formatted-data/manual_bounded_constraints_production_flex2.csv")
+
 ########## Get names of all zones ################3
 # write out for future use!
 all_zones <- unique(manual_bounded_constraints$zone)
@@ -870,4 +808,3 @@ zone_ID <- as.data.frame(all_zones) |>
   rename(zone = all_zones) |>
   mutate(id = seq(1:length(all_zones)))
 write_csv(zone_ID, "data/formatted-data/zone_id.csv")
-
