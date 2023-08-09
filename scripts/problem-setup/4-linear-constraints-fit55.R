@@ -673,7 +673,12 @@ manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_const
   left_join(zones) |>
   #dplyr::select(-c(zone)) |>
   #rename(zone=name) |>
-  dplyr::select(pu, zone, lower, upper, nuts2id)
+  dplyr::select(pu, zone, lower, upper, nuts2id) |>
+  mutate(upper = ifelse(zone == "z13", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z14", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z18", 1, upper)) |>
+  mutate(lower = ifelse(zone == "z5", 0, lower)) |>
+  mutate(upper = ifelse(zone == "z5", 0, upper))
 
 n2k_nuts2 <- manual_bounded_constraints |>   left_join(as_tibble(nuts2_all)) |> dplyr::select(-geometry) |>
   separate(zone, c('maes_label', 'intensity', 'action'), sep = "_") |>

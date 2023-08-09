@@ -630,7 +630,7 @@ manual_bounded_constraints <- read_csv(of) |>
   #rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper, nuts2id)
 
-write_csv(production_flex, "data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv")
+write_csv(manual_bounded_constraints, "data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv")
 
 ########## Get names of all zones ################3
 # write out for future use!

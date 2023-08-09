@@ -232,16 +232,14 @@ problem_setup <- function(
 
     # deal with infeasible nuts2
 
-    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/nuts2_feasible.csv") |>
-      filter(TF == "TRUE")
+    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/f455_feas_adj.csv")
 
     # crop low
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <-  nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
 
       nuts_crop <- nuts2_crop_low |>
         mutate(croparea = replace_na(value,0)) |>
@@ -271,9 +269,9 @@ problem_setup <- function(
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
 
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_crop <- nuts2_crop_med |>
         mutate(croparea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -302,9 +300,9 @@ problem_setup <- function(
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_crop <- nuts2_crop_high |>
         mutate(croparea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -332,9 +330,9 @@ problem_setup <- function(
     #
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
 
       nuts_pasture <- nuts2_pasture_low |>
         mutate(pasturearea = replace_na(value,0)) |>
@@ -365,9 +363,9 @@ problem_setup <- function(
     #
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_pasture <- nuts2_pasture_high |>
         mutate(pasturearea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -397,9 +395,9 @@ problem_setup <- function(
     # # # Forest multi
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0.5,
-                           ifelse(nuts2 == "RO08", 0.25, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_forest <- nuts2_forest_multi |>
         mutate(forestarea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2)
@@ -429,9 +427,9 @@ problem_setup <- function(
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, c("SE02", "NL23", "RO08")), 0.8,
-                    ifelse(nuts2 %in% c("SE02", "NL23"), 0,
-                           ifelse(nuts2 == "RO08", 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_forest <- nuts2_forest_prod |>
         mutate(forestarea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2)
@@ -475,22 +473,14 @@ problem_setup <- function(
 
     # deal with infeasible nuts2
 
-    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/nuts2_feasible_REF.csv") |>
-      filter(TF == "TRUE")
-
-    infeas_nuts2_80 <- read_csv("data-formatted/feasibility-tests/nuts2_feasible_REF_2.csv") |>
-      filter(TF == "TRUE")
-
-    infeas_nuts2_50 <- read_csv("data-formatted/feasibility-tests/nuts2_feasible_REF_3.csv") |>
-      filter(TF == "TRUE")
+    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/ref_feas_adj.csv")
 
     # crop low
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <-  nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
 
       nuts_crop <- nuts2_crop_low |>
         mutate(croparea = replace_na(value,0)) |>
@@ -520,9 +510,9 @@ problem_setup <- function(
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
 
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_crop <- nuts2_crop_med |>
         mutate(croparea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -551,9 +541,9 @@ problem_setup <- function(
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_crop <- nuts2_crop_high |>
         mutate(croparea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -582,9 +572,8 @@ problem_setup <- function(
     #
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
 
       nuts_pasture <- nuts2_pasture_low |>
         mutate(pasturearea = replace_na(value,0)) |>
@@ -615,9 +604,9 @@ problem_setup <- function(
     #
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_pasture <- nuts2_pasture_high |>
         mutate(pasturearea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2) |>
@@ -647,9 +636,9 @@ problem_setup <- function(
     # # # Forest multi
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_forest <- nuts2_forest_multi |>
         mutate(forestarea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2)
@@ -679,9 +668,9 @@ problem_setup <- function(
 
     for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
       nuts2 <- nuts2_names[[i]]
-      adj <- ifelse(nuts2 %in% setdiff(infeas_nuts2$nuts, infeas_nuts2_80$nuts), 0.8,
-                    ifelse(nuts2 %in% setdiff(infeas_nuts2_80$nuts, infeas_nuts2_50$nuts), 0.5,
-                           ifelse(nuts2 %in% infeas_nuts2_50$nuts, 0, 0.98)))
+      adj <- infeas_nuts2 |> filter(nuts == nuts2)
+      adj <- adj$adj[1]
+
       nuts_forest <- nuts2_forest_prod |>
         mutate(forestarea = replace_na(value,0)) |>
         filter(NUTS_ID == nuts2)
@@ -937,6 +926,15 @@ scenarios <-
     future = c("f455", "ref")
   )
 
+scenarios <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.1),
+    country_constraints = c("EVEN"),
+    restoration_constraint = 0.141,
+    restoration_scenario = c("Baseline", "HN"),
+    future = c("f455", "ref")
+  )
+
 # functionalize the for-loop contents
 iter <- function(i) {
   problem_setup(
@@ -957,7 +955,7 @@ iter <- function(i) {
     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
-    name = "globiomIC",
+    name = "globiomICflat",
     solver = "highs")
 }
 
@@ -966,3 +964,10 @@ plan(multicore, workers = 6) # see ?future::plan, for other options
 
 1:nrow(scenarios) %>%
   future_map(iter)
+
+
+#
+# #### Test outcome differences ######
+# sum(test_feas_f455$solution_1_z18)/sum(nuts2_crop_high$value)*10
+# sum(test_feas_f455$solution_1_z13)/sum(nuts2_forest_prod$value)*10
+# sum(test_feas_f455$solution_1_z14)/sum(nuts2_pasture_high$value)*10

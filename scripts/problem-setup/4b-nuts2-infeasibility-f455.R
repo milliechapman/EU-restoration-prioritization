@@ -162,7 +162,8 @@ problem <- problem(x = pu,
 p1 <- problem
 
 
-###### solve by nuts2 ##########
+######### solve by nuts2 all constraints ##########
+
 nuts2_shp <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
   mutate(country = substr(NUTS2, start = 1, stop = 2))
 nuts2_all <- nuts2_shp |>
@@ -176,7 +177,7 @@ feas <- data.frame(
 
 #feas <- read_csv("data/feasibility-tests/nuts2_feasible.csv")
 n = 1
-
+adj <- 1
 for(j in 1:length(nuts2_names_all)){
   # pre set up basic problem
   nuts <- nuts2_names_all[[j]]
@@ -190,8 +191,6 @@ for(j in 1:length(nuts2_names_all)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <-  nuts2_names[[i]]
-    adj <- 1
-
     nuts_crop <- nuts2_crop_low |>
       mutate(croparea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -220,7 +219,6 @@ for(j in 1:length(nuts2_names_all)){
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
 
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
     nuts_crop <- nuts2_crop_med |>
       mutate(croparea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -249,7 +247,6 @@ for(j in 1:length(nuts2_names_all)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
     nuts_crop <- nuts2_crop_high |>
       mutate(croparea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -278,8 +275,6 @@ for(j in 1:length(nuts2_names_all)){
   #
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
-
     nuts_pasture <- nuts2_pasture_low |>
       mutate(pasturearea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -309,7 +304,6 @@ for(j in 1:length(nuts2_names_all)){
   #
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
     nuts_pasture <- nuts2_pasture_high |>
       mutate(pasturearea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -339,7 +333,6 @@ for(j in 1:length(nuts2_names_all)){
   # # # Forest multi
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
     nuts_forest <- nuts2_forest_multi |>
       mutate(forestarea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2)
@@ -369,7 +362,6 @@ for(j in 1:length(nuts2_names_all)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.98
     nuts_forest <- nuts2_forest_prod |>
       mutate(forestarea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2)
@@ -420,18 +412,21 @@ for(j in 1:length(nuts2_names_all)){
   feas$TF[n] <- skip_to_next
   feas$nuts[n] <- nuts2_names
 
-  write_csv(feas, "data/feasibility-tests/nuts2_feasible.csv", append = FALSE)
+  write_csv(feas, "data/feasibility-tests/nuts2_feasible_f455.csv", append = FALSE)
   n = n+1
   print(feas)
   if(skip_to_next) { next }
 }
 
 
-####### refine in-feasible nuts2 ########
+
+
+######### 90% for infeasible nuts2 ########
 #small_jur <- read_csv("small_jurisdictions.csv")
-infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible.csv") |>
+infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455.csv") |>
   filter(TF == "TRUE")
 
+k=1
 infeas2 <- data.frame(
   TF = rep("TRUE",length(infeas_nuts2$nuts)),
   nuts = rep("A", length(infeas_nuts2$nuts)))
@@ -444,12 +439,10 @@ p1 <- problem(x = pu,
               rij = rij) |>
   add_min_shortfall_objective(nrow(pu))
 
-n = 1
+adj <- 0.9
 
 for(k in 1:length(infeas_nuts2$nuts)){
-
   nuts2_names <- infeas_nuts2$nuts[k] #setdiff(nuts2_all$NUTS_ID, small_jur$NUTS_ID)
-  adj <- 0.8
   # crop low
   #nuts2_names <- nuts2_all$NUTS_ID #setdiff(nuts2_all$NUTS_ID
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
@@ -482,8 +475,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_crop <- nuts2_crop_med |>
       mutate(croparea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -512,8 +503,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_crop <- nuts2_crop_high |>
       mutate(croparea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -543,8 +532,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
   #
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_pasture <- nuts2_pasture_low |>
       mutate(pasturearea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -574,8 +561,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
   #
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_pasture <- nuts2_pasture_high |>
       mutate(pasturearea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2) |>
@@ -605,8 +590,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
   # # # Forest multi
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_forest <- nuts2_forest_multi |>
       mutate(forestarea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2)
@@ -636,8 +619,6 @@ for(k in 1:length(infeas_nuts2$nuts)){
 
   for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
     nuts2 <- nuts2_names[[i]]
-    adj <- 0.8
-
     nuts_forest <- nuts2_forest_prod |>
       mutate(forestarea = replace_na(value,0)) |>
       filter(NUTS_ID == nuts2)
@@ -683,14 +664,783 @@ for(k in 1:length(infeas_nuts2$nuts)){
   # Note that print(b) fails since b doesn't exist
 
   tryCatch(solve(p_solve), error = function(e) { skip_to_next <<- TRUE})
-  infeas2$TF[n] <- skip_to_next
-  infeas2$nuts[n] <- nuts2_names
+  infeas2$TF[k] <- skip_to_next
+  infeas2$nuts[k] <- nuts2_names
 
-  write_csv(infeas2, "data/feasibility-tests/nuts2_feasible_ref_80.csv", append = FALSE)
-  n = n+1
-  print(infeas2)
+  write_csv(infeas2, "data/feasibility-tests/nuts2_feasible_f455_90.csv", append = FALSE)
+  k = k+1
   if(skip_to_next) { next }
 }
+
+######### 80% for infeasible nuts2 ########
+infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_90.csv") |>
+  filter(TF == "TRUE")
+
+infeas2 <- data.frame(
+  TF = rep("TRUE",length(infeas_nuts2$nuts)),
+  nuts = rep("A", length(infeas_nuts2$nuts)))
+
+
+p1 <- problem(x = pu,
+              features = feat,
+              zones = z,
+              cost_column = cost_columns,
+              rij = rij) |>
+  add_min_shortfall_objective(nrow(pu))
+
+adj <- 0.8
+k=1
+
+for(k in 1:length(infeas_nuts2$nuts)){
+  nuts2_names <- infeas_nuts2$nuts[k] #setdiff(nuts2_all$NUTS_ID, small_jur$NUTS_ID)
+  # crop low
+  #nuts2_names <- nuts2_all$NUTS_ID #setdiff(nuts2_all$NUTS_ID
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+
+    nuts_crop <- nuts2_crop_low |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p1 |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    #else(print("no crop low constraint"))
+  }
+
+  # crop med
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_med |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_med_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop med constraint"))
+  }
+
+  #crop high
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_high |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = ifelse(nuts_crop$croparea[[1]]< 1, 0,
+                                                  nuts_crop$croparea[[1]]/10*adj),
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop high constraint"))
+  }
+
+
+  #   # Pasture low
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_low |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 1, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture low constraint"))
+  }
+
+  #   # Pasture high
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_high |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 10, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture high constraint"))
+  }
+
+  #
+  # # # Forest multi
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_multi |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_multi_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10<1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+    }
+    #else(print("no forest multi constraint"))
+  }
+  #
+  #   # # Forest prod
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_prod |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_prod_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10< 1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+
+    }
+    # else(print("no forest prod constraint"))
+  }
+  features_weighted <- targs |>
+    mutate(weight = ifelse(feature == "999999", (nrow(targs)-1)*2*0.5, weight)) |>
+    # mutate(weight = ifelse(feature == "urban", 1000, weight)) |>
+    dplyr::select(weight) |>
+    as.matrix()
+
+  targs_filtered <- targs |> dplyr::select(-weight)
+
+  p_solve <- p |>
+    add_proportion_decisions() |>
+    add_manual_targets(targs_filtered) |>
+    add_gurobi_solver(gap = 0.8, threads = cores, numeric_focus = FALSE,
+                      verbose = TRUE) |>
+    add_manual_bounded_constraints(manual_bounded_constraints) |>
+    add_feature_weights(features_weighted)
+  print(nuts2_names)
+  skip_to_next <- FALSE
+
+  # Note that print(b) fails since b doesn't exist
+
+  tryCatch(solve(p_solve), error = function(e) { skip_to_next <<- TRUE})
+  infeas2$TF[k] <- skip_to_next
+  infeas2$nuts[k] <- nuts2_names
+
+  write_csv(infeas2, "data/feasibility-tests/nuts2_feasible_f455_80.csv", append = FALSE)
+  k = k+1
+  if(skip_to_next) { next }
+}
+
+######### 70% for infeasible nuts2 ########
+infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_80.csv") |>
+  filter(TF == "TRUE")
+
+infeas2 <- data.frame(
+  TF = rep("TRUE",length(infeas_nuts2$nuts)),
+  nuts = rep("A", length(infeas_nuts2$nuts)))
+
+p1 <- problem(x = pu,
+              features = feat,
+              zones = z,
+              cost_column = cost_columns,
+              rij = rij) |>
+  add_min_shortfall_objective(nrow(pu))
+
+adj <- 0.7
+k=1
+
+for(k in 1:length(infeas_nuts2$nuts)){
+  nuts2_names <- infeas_nuts2$nuts[k] #setdiff(nuts2_all$NUTS_ID, small_jur$NUTS_ID)
+  # crop low
+  #nuts2_names <- nuts2_all$NUTS_ID #setdiff(nuts2_all$NUTS_ID
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+
+    nuts_crop <- nuts2_crop_low |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p1 |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    #else(print("no crop low constraint"))
+  }
+
+  # crop med
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_med |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_med_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop med constraint"))
+  }
+
+  #crop high
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_high |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = ifelse(nuts_crop$croparea[[1]]< 1, 0,
+                                                  nuts_crop$croparea[[1]]/10*adj),
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop high constraint"))
+  }
+
+
+  #   # Pasture low
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_low |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 1, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture low constraint"))
+  }
+
+  #   # Pasture high
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_high |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 10, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture high constraint"))
+  }
+
+  #
+  # # # Forest multi
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_multi |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_multi_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10<1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+    }
+    #else(print("no forest multi constraint"))
+  }
+  #
+  #   # # Forest prod
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_prod |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_prod_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10< 1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+
+    }
+    # else(print("no forest prod constraint"))
+  }
+  features_weighted <- targs |>
+    mutate(weight = ifelse(feature == "999999", (nrow(targs)-1)*2*0.5, weight)) |>
+    # mutate(weight = ifelse(feature == "urban", 1000, weight)) |>
+    dplyr::select(weight) |>
+    as.matrix()
+
+  targs_filtered <- targs |> dplyr::select(-weight)
+
+  p_solve <- p |>
+    add_proportion_decisions() |>
+    add_manual_targets(targs_filtered) |>
+    add_gurobi_solver(gap = 0.8, threads = cores, numeric_focus = FALSE,
+                      verbose = TRUE) |>
+    add_manual_bounded_constraints(manual_bounded_constraints) |>
+    add_feature_weights(features_weighted)
+  print(nuts2_names)
+  skip_to_next <- FALSE
+
+  # Note that print(b) fails since b doesn't exist
+
+  tryCatch(solve(p_solve), error = function(e) { skip_to_next <<- TRUE})
+  infeas2$TF[k] <- skip_to_next
+  infeas2$nuts[k] <- nuts2_names
+
+  write_csv(infeas2, "data/feasibility-tests/nuts2_feasible_f455_70.csv", append = FALSE)
+  k = k+1
+  if(skip_to_next) { next }
+}
+
+
+######### 80% for infeasible nuts2 ########
+infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_70.csv") |>
+  filter(TF == "TRUE")
+
+infeas2 <- data.frame(
+  TF = rep("TRUE",length(infeas_nuts2$nuts)),
+  nuts = rep("A", length(infeas_nuts2$nuts)))
+
+p1 <- problem(x = pu,
+              features = feat,
+              zones = z,
+              cost_column = cost_columns,
+              rij = rij) |>
+  add_min_shortfall_objective(nrow(pu))
+
+adj <- 0.3
+k=1
+
+for(k in 1:length(infeas_nuts2$nuts)){
+  nuts2_names <- infeas_nuts2$nuts[k] #setdiff(nuts2_all$NUTS_ID, small_jur$NUTS_ID)
+  # crop low
+  #nuts2_names <- nuts2_all$NUTS_ID #setdiff(nuts2_all$NUTS_ID
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+
+    nuts_crop <- nuts2_crop_low |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p1 |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    #else(print("no crop low constraint"))
+  }
+
+  # crop med
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_med |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_med_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop med constraint"))
+  }
+
+  #crop high
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_crop <- nuts2_crop_high |>
+      mutate(croparea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+    if(nrow(nuts_crop)>0) {
+
+      crop_budget <- pu_cropland_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = ifelse(nuts_crop$croparea[[1]]< 1, 0,
+                                                  nuts_crop$croparea[[1]]/10*adj),
+                               sense = ">=",
+                               data = crop_budget)
+      #print(nuts2)
+    }
+    # else(print("no crop high constraint"))
+  }
+
+
+  #   # Pasture low
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_low |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 1, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_low_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture low constraint"))
+  }
+
+  #   # Pasture high
+  #
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_pasture <- nuts2_pasture_high |>
+      mutate(pasturearea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2) |>
+      mutate(value = replace_na(value, 0),
+             pasturearea = replace_na(pasturearea,0))|>
+      mutate(pasturearea = ifelse(value < 10, 0, value))
+
+    if(nrow(nuts_pasture)>0) {
+
+      pasture_budget <- pu_pasture_high_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      p <- p |>
+        add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
+                               sense = ">=",
+                               data = pasture_budget)
+      #print(nuts2)
+    }
+    #else(print("no pasture high constraint"))
+  }
+
+  #
+  # # # Forest multi
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_multi |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_multi_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10<1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+    }
+    #else(print("no forest multi constraint"))
+  }
+  #
+  #   # # Forest prod
+
+  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+    nuts2 <- nuts2_names[[i]]
+    nuts_forest <- nuts2_forest_prod |>
+      mutate(forestarea = replace_na(value,0)) |>
+      filter(NUTS_ID == nuts2)
+
+    if(nrow(nuts_forest)>0.01) {
+
+      forest_budget <- pu_forest_prod_budget_data |>
+        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+        mutate_at(vars(starts_with("z")), ~.*m) |>
+        dplyr::select(-c(m, NUTS_ID, pu)) |>
+        as.matrix() |>
+        replace_na(0)
+
+      forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10< 1, 0,
+                                 nuts_forest$forestarea[[1]]/10*adj)
+      p <- p |>
+        add_linear_constraints(threshold = forest_threshold,
+                               sense = ">=",
+                               data = forest_budget)
+      #print(nuts2)
+
+    }
+    # else(print("no forest prod constraint"))
+  }
+  features_weighted <- targs |>
+    mutate(weight = ifelse(feature == "999999", (nrow(targs)-1)*2*0.5, weight)) |>
+    # mutate(weight = ifelse(feature == "urban", 1000, weight)) |>
+    dplyr::select(weight) |>
+    as.matrix()
+
+  targs_filtered <- targs |> dplyr::select(-weight)
+
+  p_solve <- p |>
+    add_proportion_decisions() |>
+    add_manual_targets(targs_filtered) |>
+    add_gurobi_solver(gap = 0.8, threads = cores, numeric_focus = FALSE,
+                      verbose = TRUE) |>
+    add_manual_bounded_constraints(manual_bounded_constraints) |>
+    add_feature_weights(features_weighted)
+  print(nuts2_names)
+  skip_to_next <- FALSE
+
+  # Note that print(b) fails since b doesn't exist
+
+  tryCatch(solve(p_solve), error = function(e) { skip_to_next <<- TRUE})
+  infeas2$TF[k] <- skip_to_next
+  infeas2$nuts[k] <- nuts2_names
+
+  write_csv(infeas2, "data/feasibility-tests/nuts2_feasible_f455_30.csv", append = FALSE)
+  k = k+1
+  if(skip_to_next) { next }
+}
+
+
+#### combine into dataframe ############
+
+f455_feas <- read_csv("data/feasibility-tests/nuts2_feasible_f455.csv") |>
+  filter(TF == FALSE) |>
+  mutate(adj = 1)
+f455_90 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_90.csv") |>
+  filter(TF == FALSE) |>
+  mutate(adj = 0.9)
+f455_80 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_80.csv") |>
+  filter(TF == FALSE) |>
+  mutate(adj = 0.8)
+f455_70 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_70.csv") |>
+  filter(TF == FALSE) |>
+  mutate(adj = 0.7)
+f455_30 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_30.csv") |>
+  filter(TF == FALSE) |>
+  mutate(adj = 0.3)
+f455_feas_adj <- rbind(f455_feas, f455_90, f455_80, f455_70, f455_30)
+write_csv(f455_feas_adj, "data/feasibility-tests/f455_feas_adj.csv")
 
 
 ########### Solve entire problem ############

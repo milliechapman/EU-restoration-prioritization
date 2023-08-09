@@ -18,11 +18,16 @@ writeRDS(names, "data-formatted/SpeciesData/SDMNameMatching.rds")
 targs_existing <- read_csv("data/formatted-data/targets_split.csv")
 write_csv(targs_existing, "data-formatted/targets_split.csv")
 
-manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv") 
+manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_production_globiom_flex.csv")
 write_csv(manual_bounded_constraints, "data-formatted/manual_bounded_constraints_production_globiom_flex.csv")
 
+f455_nuts2_adj <- read_csv("data/feasibility-tests/f455_feas_adj.csv")
+write_csv(f455_nuts2_adj, "data-formatted/feasibility-tests/f455_feas_adj.csv")
+
+ref_nuts2_adj <- read_csv("data/feasibility-tests/ref_feas_adj.csv")
+write_csv(ref_nuts2_adj, "data-formatted/feasibility-tests/ref_feas_adj.csv")
 
 R.utils::copyDirectory("data/formatted-data/linear_constraints/", "data-formatted/linear_constraints/")
 
-R.utils::copyDirectory("data/feasibility-tests/", "data-formatted/feasibility-tests")
+#R.utils::copyDirectory("data/feasibility-tests/", "data-formatted/feasibility-tests")
 
