@@ -24,7 +24,7 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- list.files("../data-formatted/sol/", full.names = T)
+sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_highs_ref.csv", full.names = T)
 solution <- read_csv(sol[[1]]) |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 
@@ -84,6 +84,24 @@ bar_plot <- as_tibble(solution_table_plot) |>
   theme(legend.position = c(0.8,0.8),
         legend.title = element_blank()) +
     scale_fill_manual(values = c(met.brewer(name="Kandinsky",n=4,type="continuous"))[c(1,3,2)]) + coord_flip()
+
+bar_plot
+```
+
+```{r}
+bar_plot <- as_tibble(solution_table_plot) |>
+  group_by(action) |>
+  summarise(area = sum(value)) |>
+  mutate(action = ifelse(action == "lockin", "urban", action)) |>
+  ungroup() |> filter(area >0) |> mutate(tot_area = sum(area)) |>
+  mutate(perc = area/tot_area*100) |>
+  #mutate(intensity = ifelse(intensity == "primary", "natural", intensity)) |>
+  #mutate(name = paste0(maes_label, " \n (", intensity, ")")) |>
+  ggplot(aes(x = reorder(action, -perc), y = perc)) + geom_bar(stat="identity", width = 0.7) +
+  theme_classic() + 
+  labs(x = element_blank(), y = "percent area") +
+  theme(legend.position = c(0.8,0.8),
+        legend.title = element_blank()) 
 
 bar_plot
 ```
