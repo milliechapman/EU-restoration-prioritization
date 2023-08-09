@@ -38,6 +38,7 @@ problem_setup <- function(
     restoration_scenario,
     future = "f455", #f455, ref
     name,
+    use_adjusted_targets = TRUE,
     solver = "gurobi" #high, gurobi
 )
 {
@@ -220,24 +221,27 @@ problem_setup <- function(
 
   # define production scenario
   if(future == "f455"){
-    nuts2_crop_low <- read_csv("data-formatted/linear_constraints/nuts_crop_low_55_adjusted.csv")
+    nuts2_crop_low <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_low_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_crop_med <- read_csv("data-formatted/linear_constraints/nuts_crop_med_55_adjusted.csv")
+    nuts2_crop_med <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_med_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_crop_high <- read_csv("data-formatted/linear_constraints/nuts_crop_high_55_adjusted.csv")
+    nuts2_crop_high <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_high_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_pasture_high <- read_csv("data-formatted/linear_constraints/nuts_pasture_high_55_adjusted.csv")
+    nuts2_pasture_high <- read_csv(paste0("data-formatted/linear_constraints/nuts_pasture_high_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_pasture_low <- read_csv("data-formatted/linear_constraints/nuts_pasture_low_55_adjusted.csv")
+    nuts2_pasture_low <- read_csv(paste0("data-formatted/linear_constraints/nuts_pasture_low_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_forest_multi <- read_csv("data-formatted/linear_constraints/nuts_forest_multi_55_adjusted.csv")
+    nuts2_forest_multi <- read_csv(paste0("data-formatted/linear_constraints/nuts_forest_multi_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_forest_prod <- read_csv("data-formatted/linear_constraints/nuts_forest_prod_55_adjusted.csv")
+    nuts2_forest_prod <- read_csv(paste0("data-formatted/linear_constraints/nuts_forest_prod_55",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
     # deal with infeasible nuts2
 
     infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/nuts2_feasible.csv") |>
       filter(TF == "TRUE")
+
+    # Correction here
+    # BG06 | ES22 | ES23 | NL23 (max difference -5.4 BG06)
 
     # crop low
 
@@ -463,19 +467,19 @@ problem_setup <- function(
   }
 
   if(future == "ref"){
-    nuts2_crop_low <- read_csv("data-formatted/linear_constraints/nuts_crop_low_ref_adjusted.csv")
+    nuts2_crop_low <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_low_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_crop_med <- read_csv("data-formatted/linear_constraints/nuts_crop_med_ref_adjusted.csv")
+    nuts2_crop_med <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_med_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_crop_high <- read_csv("data-formatted/linear_constraints/nuts_crop_high_ref_adjusted.csv")
+    nuts2_crop_high <- read_csv(paste0("data-formatted/linear_constraints/nuts_crop_high_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_pasture_high <- read_csv("data-formatted/linear_constraints/nuts_pasture_high_ref_adjusted.csv")
+    nuts2_pasture_high <- read_csv(paste0("data-formatted/linear_constraints/nuts_pasture_high_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_pasture_low <- read_csv("data-formatted/linear_constraints/nuts_pasture_low_ref_adjusted.csv")
+    nuts2_pasture_low <- read_csv(paste0("data-formatted/linear_constraints/nuts_pasture_low_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_forest_multi <- read_csv("data-formatted/linear_constraints/nuts_forest_multi_ref_adjusted.csv")
+    nuts2_forest_multi <- read_csv(paste0("data-formatted/linear_constraints/nuts_forest_multi_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
-    nuts2_forest_prod <- read_csv("data-formatted/linear_constraints/nuts_forest_prod_ref_adjusted.csv")
+    nuts2_forest_prod <- read_csv(paste0("data-formatted/linear_constraints/nuts_forest_prod_ref",ifelse(use_adjusted_targets, "_adjusted",""),".csv"))
 
     # deal with infeasible nuts2
 
@@ -980,6 +984,7 @@ iter <- function(i) {
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
     name = ifelse(apply_initialglobiom, "globiomIC_initialGLOBIOM", "globiomIC"),
+    use_adjusted_targets = FALSE,
     solver = "gurobi")
 }
 iter(1)

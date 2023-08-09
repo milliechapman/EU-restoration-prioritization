@@ -40,10 +40,10 @@ forests_production_perc <- forests_production/forests_total
 # plot(forests_production_perc)
 
 # Calculate crop intensity per PU
-crop_high <- rast("data/Dou_CropIntensity/DouEtAl_HighIntensityCropland.tif")
-crop_mid <- rast("data/Dou_CropIntensity/DouEtAl_MediumIntensityCropland.tif")
-crop_low <- rast("data/Dou_CropIntensity/DouEtAl_LowIntensityCropland.tif")
-crop_total <- sum(crop_high,crop_low,crop_mid,na.rm = TRUE)
+# crop_high <- rast("data/Dou_CropIntensity/DouEtAl_HighIntensityCropland.tif")
+# crop_mid <- rast("data/Dou_CropIntensity/DouEtAl_MediumIntensityCropland.tif")
+# crop_low <- rast("data/Dou_CropIntensity/DouEtAl_LowIntensityCropland.tif")
+# crop_total <- sum(crop_high,crop_low,crop_mid,na.rm = TRUE)
 # crop_high_perc <- crop_high/crop_total
 # crop_mid_perc <- crop_mid/crop_total
 # crop_low_perc <- crop_low/crop_total
@@ -123,10 +123,10 @@ if(apply_initialglobiom){
   crop_high_perc <- nuts2_globiom_crop_high
   crop_mid_perc <- nuts2_globiom_crop_mid
   crop_low_perc <- nuts2_globiom_crop_low
+  crop_total <- sum( crop_low_perc, crop_mid_perc, crop_high_perc)
   assertthat::assert_that(
     all(cellStats(stack(crop_high_perc, crop_low_perc, crop_mid_perc), "max") <= 1)
   )
-  crop_total <- sum( crop_low_perc, crop_mid_perc, crop_high_perc)
 } else {
   crop_total <- sum(crop_low, crop_mid ,crop_high, na.rm = TRUE)
   crop_high_perc <- crop_high/crop_total
@@ -284,16 +284,6 @@ PU_natura_lc <- PU_natura_lc |>
                    #area
                    ))
 
-# Apply initial globiom correction
-if(apply_initialglobiom){
-  # --- #
-  # Write output
-  write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity_initialGLOBIOM.csv")
-} else {
-  # Write output
-  write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity.csv")
-}
-
 ## LULC for PU overall (proportion from 100m data)
 PU_lc <- PU_lc  |>
   left_join(PU_intensity_forests) |>
@@ -343,11 +333,26 @@ PU_lc <- PU_lc  |>
                    #area
                    ))
 
+# ------- #
+# Further error checks here
+test <- PU_natura_lc |> dplyr::select(-Status,-PUID)
+test2 <- PU_lc |> dplyr::select(-Status,-PUID)
+o <- apply(test2, 1, function(y) sum(y, na.rm = TRUE) )
+assertthat::assert_that(
+  all( apply(test, 1, function(y) sum(y, na.rm = TRUE)) <= 1),
+  all( apply(test2, 1, function(y) sum(y, na.rm = TRUE) ) <= 1)
+)
+# ------- #
+
 # Apply initial globiom correction
 if(apply_initialglobiom){
   # Write output
+  write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity_initialGLOBIOM.csv")
+  # Write output
   write_csv(PU_lc, "data/outputs/2-zones/PU_lc_intensity_initialGLOBIOM.csv")
 } else {
+  # Write output
+  write_csv(PU_natura_lc, "data/outputs/2-zones/PU_natura_lc_intensity.csv")
   # Write output
   write_csv(PU_lc, "data/outputs/2-zones/PU_lc_intensity.csv")
 }
