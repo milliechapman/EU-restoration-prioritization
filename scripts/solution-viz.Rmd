@@ -24,7 +24,7 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_highs_ref.csv", full.names = T)
+sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_highs_f455.csv", full.names = T)
 solution <- read_csv(sol[[1]]) |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 

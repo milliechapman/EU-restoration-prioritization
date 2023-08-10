@@ -919,17 +919,8 @@ p <- problem(x = pu,
 ### solve ######
 scenarios <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.2,0.3,seq(0,2, by = 0.5)),
+    carbon_weight = c(0.1, 0.3,seq(0.5,2, by = 0.5)),
     country_constraints = c("EVEN", "FLEX", "UNCONSTRAINED"),
-    restoration_constraint = 0.141,
-    restoration_scenario = c("Baseline", "HN"),
-    future = c("f455", "ref")
-  )
-
-scenarios <-
-  tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1),
-    country_constraints = c("EVEN"),
     restoration_constraint = 0.141,
     restoration_scenario = c("Baseline", "HN"),
     future = c("f455", "ref")
@@ -956,7 +947,7 @@ iter <- function(i) {
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
     name = "globiomICflat",
-    solver = "highs")
+    solver = "gurobi")
 }
 
 ## plan and run scenarios
