@@ -34,7 +34,7 @@ problem_setup <- function(
     restoration_scenario,
     future = "f455", #f455, ref
     name,
-    solver = "highs" #high, gurobi
+    solver = "gurobi" #high, gurobi
 )
 {
   # FEATURE WEIGHTS matrix
@@ -919,7 +919,7 @@ p <- problem(x = pu,
 ### solve ######
 scenarios <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    carbon_weight = c(0.7,0.9,1.1,1.3,1.5,1.7,1.9),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
     country_constraints = c("EVEN", "FLEX", "UNCONSTRAINED"),
     restoration_constraint = 0.141,
     restoration_scenario = c("Baseline", "HN"),

@@ -6,7 +6,7 @@ library(raster)
 library(fasterize)
 #rm(list = ls())
 
-targets <- read_csv("data/data-formatted/targets_split_formatted.csv")
+targets <- read_csv("data/formatted-data/targets_split_formatted.csv")
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 raster <- raster("data/landcover/10km/Corine_2018_cropland.tif")
 
@@ -30,7 +30,7 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
 rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
 ## Calculate representation and save
 
-filelist_temp <- list.files("data/solutions/sol/") #, pattern = c("*_ref.csv|*_f455.csv"))
+filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
 shortfalls <- list()
 #  join targets and spp info
 for (i in 1:length(filelist_temp)) {
@@ -40,7 +40,7 @@ for (i in 1:length(filelist_temp)) {
   scenario <- filenm[[15]]
   future <- str_sub(filenm[[18]], 1,-5)
 
-  solution <- read_csv(paste0("data/solutions/sol/", filelist_temp[[i]]))
+  solution <- read_csv(filelist_temp[[i]])
 
   solution <- solution |>
     rowid_to_column("pu") |>
@@ -168,15 +168,16 @@ PU_template_EU <- pu_in_EU |>
   dplyr::select(-id) |>
   rename(id = EU_id)
 
-filelist_temp <- list.files("data/solutions/sol/") #, pattern = c("*_ref.csv|*_f455.csv"))
+filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
+filelist_nm <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"))
 solution_scenarios <- list()
 zones <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id))
 #  join targets and spp info
 #
 for (i in 1:length(filelist_temp)) {
-  name <- substr(filelist_temp[[i]],1,nchar(filelist_temp[[i]])-4)
-  solution <- read_csv(paste0("data/solutions/sol/", filelist_temp[[i]])) |>
+  name <- substr(filelist_nm[[i]],1,nchar(filelist_nm[[i]])-4)
+  solution <- read_csv(filelist_temp[[i]]) |>
     dplyr::select(id, solution_1_z1:solution_1_z26)
 
   colnames(solution) <- c("id", (zones$zone))
@@ -245,15 +246,16 @@ write_csv(MAES, "data/plotting/spp_lookup.csv")
 # Read  in solutions
 
 plot_table <- list()
-files <- list.files(path = "data/solutions/sol/")
-for(i in 1:length(files)){
-  nm <- files[i] #"sol_carbon_0.1_restoration_0.2_production_TRUE_country_TRUE_bioregion_TRUE_wetlands_TRUE_onlyrestoration_FALSE_TRIAL"
+filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
+filelist_nm <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"))
+for(i in 1:length(filelist_temp)){
+  nm <- filelist_nm[i] #"sol_carbon_0.1_restoration_0.2_production_TRUE_country_TRUE_bioregion_TRUE_wetlands_TRUE_onlyrestoration_FALSE_TRIAL"
   carbon <- str_split(nm, "_")[[1]][3]
   country_TF <- str_split(nm, "_")[[1]][9]
   scenario <- str_split(nm, "_")[[1]][15]
   future <- str_split(nm, "_")[[1]][18]
 
-  solution <- read_csv(paste0("data/solutions/sol/", nm)) |>
+  solution <- read_csv(filelist_temp[[i]]) |>
     dplyr::select(id, solution_1_z1:solution_1_z26)
   colnames(solution) <- c("id", (zone_id$zone))
 

@@ -24,14 +24,26 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_highs_f455.csv", full.names = T)
+sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
 solution <- read_csv(sol[[1]]) |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
+
+ic <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |> rename(pu = PUID)
+
+pu_in_EU <- read_csv("../data-formatted/pu_in_EU.csv") 
+
+ic <- ic |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu, nuts2id)) |>
+  drop_na(id)
 
 zone_id <- read_csv("../data-formatted/zone_id.csv") 
 zone_id$zone
 colnames(solution) <- c("id", (zone_id$zone))
 ```
+
+
 
 ```{r include = FALSE, cache = TRUE}
 MAES <- readRDS("../data-formatted/EEA_habitatpreferences.rds") |>
@@ -71,6 +83,10 @@ solution_table_plot <- solution_table |>
 Quick bar plot of zones
 
 ```{r width = 10}
+as_tibble(solution_table_plot) |>
+  group_by(action) |>
+  summarise(area = sum(value)/41046)
+
 bar_plot <- as_tibble(solution_table_plot) |>
   group_by(zone, maes_label, intensity, action) |>
   summarise(area = sum(value)) |>
@@ -171,6 +187,71 @@ levelplot(produce, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw
 ```{r prod_ov, fig.width=5, fig.height = 5.5, dpi = 400}
 prod_agg <- app(produce, sum)
 plot(prod_agg, col = colors)
+```
+
+reshuffling
+```{r fig.width=6, fig.height = 6, dpi = 400}}
+solution_rs <- solution |>
+  pivot_longer(-id) |>
+  rename(value_sol = value) |>
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
+  mutate(name = paste0(maes_label,"_", intensity))
+
+solution_rs <- solution_rs |>
+  group_by(id, name) |>
+  summarise(value_sol = sum(value_sol, na.rm = T)) |> 
+  ungroup()
+
+unique(solution_rs$name)
+
+ic_rs <- ic |> dplyr::select(-Status) |>
+  pivot_longer(-id) |>
+  rename(value_ic = value) |>
+  full_join(solution_rs) |> mutate(value_ic = replace_na(value_ic,0),
+                value_sol= replace_na(value_sol, 0),
+                diff = value_sol- value_ic) |> dplyr::select(-c(value_sol,value_ic))
+
+ic_rs_wide <- ic_rs |> pivot_wider(names_from = name, values_from = diff)
+ic_rs |>
+  ggplot(aes(x = diff)) + geom_histogram(bins=50) + facet_wrap(~name) +
+  labs(y = "number of pixels", x = "solution value - initial conditions") +
+  theme_classic()
+
+```
+
+```{r}
+solution_table <- pu_in_EU |> rename(id = pu) |> #plot_data |> 
+  left_join(PU_template) |> 
+  dplyr::select(-id) |>
+  rename(id = EU_id) |>
+  left_join(ic_rs_wide) |> 
+  pivot_longer(-c(nuts2id:geometry)) |>
+  filter(name %in% c("WoodlandForest_prod", "Cropland_high", "Pasture_high"))
+
+solution_table |> mutate(shuffle = ifelse(value>0, "positive", "negative")) |>
+  group_by(nuts2id, name, shuffle) |> summarise(value = sum(value)) |> ungroup() |>
+  pivot_wider(names_from = shuffle, values_from = value) |>
+  #mutate(diff = positive/(positive + abs(negative))*100) |>
+  ggplot(aes(x = positive, y = negative*-1, color = name)) + 
+  geom_point()
+  
+rs_raster <- fasterize(st_as_sf(solution_table), PU_plot, field = "value", by = "name")
+rs_raster <- rast(rs_raster)
+
+plot(rs_raster)
+```
+
+```{r}
+library(RStoolbox)
+
+ggR(rs_raster, layer = 2, maxpixels = 1e10,forceCat = FALSE,
+          geom_raster = TRUE, coord_equal = TRUE,stretch = "none", ggObj = TRUE) +
+  ggthemes::theme_map(base_size = 11,base_family = 'Arial') +
+  scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
+                   guide = guide_colorbar(title = "crop Difference",ticks = FALSE) ) +
+  theme(legend.position = c(.05,.15),legend.background = element_rect(fill = 'transparent'),
+        plot.title = element_text(size = 23, hjust = .5),plot.subtitle = element_text(hjust = .5)) +
+  labs(x = "", y = "")
 ```
 
 
