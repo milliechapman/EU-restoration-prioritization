@@ -11,6 +11,9 @@ library(exactextractr)
 rm(list = ls())
 
 globiom_lc <- stack("data/initial_lc_globiom/Protection_augmented_ETL2_shares_August_2023.tif")
+plot(globiom_lc)
+sum(globiom_lc)
+
 perm_crop <- stack("data/initial_lc_globiom/Permanent_Cropland_split_share_total_crop_area_August_2023.tif")
 
 PU_template_r <- raster("data/landcover/10km/Corine_2018_cropland.tif")

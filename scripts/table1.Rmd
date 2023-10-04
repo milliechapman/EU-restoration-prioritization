@@ -1,0 +1,110 @@
+---
+title: "Formattable data frame"
+author: "Kun Ren"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Formattable data frame}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, echo=FALSE, include=FALSE}
+set.seed(123)
+```
+
+Formattable data frames are data frames to be rendered as HTML table with formatter functions applied, which resembles conditional formatting in Microsoft Excel. 
+
+Using `knitr::kable()` or `formattable()`, the data frame can be rendered as HTML table which looks more friendly.
+
+```{r}
+library(formattable)
+```
+
+```{r}
+plain_formatter <- formatter("span")
+plain_formatter(c(1, 2, 3))
+```
+
+```{r}
+width_formatter <- formatter("span",
+  style = x ~ style(width = suffix(x, "px")))
+width_formatter(c(10, 11, 12))
+```
+```{r}
+sign_formatter <- formatter("span", 
+  style = x ~ style(color = ifelse(x > 0, "green", 
+    ifelse(x < 0, "red", "black"))))
+sign_formatter(c(-1, 0, 1))
+```
+
+We can also create another formatter function that makes above-average values bold while leaving others unchanged.
+
+```{r}
+above_avg_bold <- formatter("span", 
+  style = x ~ style("font-weight" = ifelse(x > mean(x), "bold", NA)))
+```
+
+
+
+
+
+
+```{r }
+library(tidyverse)
+rest_table <- read_csv("data/rest_table_results.csv")
+
+
+t <- rest_table |> 
+  mutate(`% total area restored` = round(percent_restored*100, 1),
+                     `% deintensification` = round((deintensification/area_restored)*percent_restored*100,1),
+                     `% nature` = round((nature/area_restored)*percent_restored*100,1),
+                     `% rewetting` = round((rewetting/area_restored)*percent_restored*100,1)) |>
+  mutate(country_TF = ifelse(country_TF == "FLEX", "Flexible",
+                             ifelse(country_TF == "EVEN", "Even ", "Unconstrained")) ) |>
+  mutate(future = ifelse(future == "f455.csv", "Fit for 55", "BAU")) |>
+  rename(`burden sharing` = country_TF,
+         `restoration scenario` = scenario,
+         `production constraints` = future) |>
+  dplyr::select(-c(area_restored, nature, rewetting, deintensification, percent_restored)) |>
+  #dplyr::select(-c(area_restored)) |> 
+  formattable(list(
+  `% total area restored` =color_tile("grey","#654321"),
+  `% nature` = color_bar("darkgreen"),
+  `% rewetting` = color_bar("lightblue"),
+  `% deintensification` = color_bar("#FFCC00")))
+
+
+t
+```
+
+## Area formatting
+
+Sometimes, it is useful to apply a formatter function to an area so that all cells in the area share one benchmark. Area formatting is supported through the syntax of `area(row, col) ~ formatter` in the formatter list.
+
+The following example renders the three columns altogether so that they share the same benchmark, not independently.
+
+```{r}
+set.seed(123)
+df <- data.frame(id = 1:10, 
+  a = rnorm(10), b = rnorm(10), c = rnorm(10))
+formattable(df, list(area(col = a:c) ~ color_tile("transparent", "pink")))
+```
+
+If a one-sided formula is supplied, the function will be applied to all cells.
+
+```{r}
+formattable(df[, -1], list(~ percent))
+```
+
+# Dynamically generating formatters
+
+Since `formattable()` accepts a list of formatter functions, the list can be dynamically generated. For example, the following code applies row-wise formatting, that is, each row is colored independently.
+
+```{r}
+df <- cbind(data.frame(id = 1:10), 
+  do.call(cbind, lapply(1:8, function(x) rnorm(10))))
+formattable(df, lapply(1:nrow(df), function(row) {
+  area(row, col = -1) ~ color_tile("lightpink", "lightblue")
+}))
+```

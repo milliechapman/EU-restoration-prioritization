@@ -297,6 +297,7 @@ fig1_solution_bar <- as_tibble(solution_table_plot) |>
   mutate(action = ifelse(action == "lockin", "production", action)) |>
   ungroup() |> filter(area >0) |>
   mutate(intensity = ifelse(intensity == "primary", "natural", intensity)) |>
+  mutate(maes_label = ifelse(maes_label %in% c("RiversLakes", "MarineTransitional"), "RiversLakesMarine", maes_label)) |>
   mutate(name = paste0(maes_label, " \n (", intensity, ")")) |>
   ggplot(aes(x = reorder(name, -area), y = area/10, fill = action)) + geom_bar(stat="identity", width = 0.7) +
   theme_classic() +
@@ -427,7 +428,7 @@ pareto_burden_plot_new <- b_status |> ungroup() |>
   #ylim(11, 40) +
   #xlim(52, 62) +
   #scale_color_manual(values = c("grey2", "grey")) +
-  scale_color_manual(values = c( "grey", "grey2", "red")) +
+  scale_color_manual(values = c( "grey", "grey2", "darkred")) +
   #scale_color_manual(values = c("orange", "blue", "black")) +
   #scale_alpha_manual(values = c(1, 0)) +
   labs(x = "% of species with improved \n conservation status",
@@ -527,6 +528,8 @@ ggsave("figures/updated/burden-sharing-LC.png",fig3c_data, width= 3, height = 3,
 ## Biodiversity
 
 lj_biodiv_ic <- rep_IC_formatted |> filter(scenario == "IC") |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
   group_by(speciesgroup, target_met) |>
   count() |> pivot_wider(names_from = target_met, values_from = n) |>
   mutate(perc_met_IC = yes/(yes+no)) |> dplyr::select(-c(no, yes))
@@ -571,7 +574,7 @@ burden_biodiv_plot <- ggboxplot(burden_biodiv, x = "country_contraint", y = "per
                  short.panel.labs = TRUE, scales = "free") +
    # stat_compare_means(aes(label = ..p.signif..))  +
   theme_classic() +
-  scale_color_manual(values = c( "grey", "grey2", "red")) +
+  scale_color_manual(values = c( "grey", "grey2", "darkred")) +
   theme(legend.position = "none") +
   labs(x = "", y = "percent of species targets met") +
   theme(axis.text.x = element_text(size = 12)) #+
@@ -583,7 +586,9 @@ ggsave("figures/updated/burden-sharing-spp.png",burden_biodiv_plot, width=8 , he
 
 ## pareto new metrics
 pareto_restoration <- b_status |> ungroup() |> dplyr::select(-spp) |> filter(carbon_weight >0) |>
-  filter(country_contraint == "FLEX") |>
+  filter(country_contraint == "FLEX",
+         future == "f455"
+         ) |>
   left_join(c_perc |> ungroup() |> dplyr::select(-spp)) |>
   ggplot(aes(x = improved*100, y = rep_diff)) +
   geom_line(aes(linetype = scenario, alpha = future), lwd = 1) +
@@ -596,8 +601,9 @@ pareto_restoration <- b_status |> ungroup() |> dplyr::select(-spp) |> filter(car
        y = "% increase in land carbon stock \n (compared to current conditions)")
 
 ## pareto new metrics
-pareto_restoration2 <- b_status |> ungroup() |> dplyr::select(-spp) |> filter(carbon_weight >0) |>
-  filter(future == "ref") |>
+pareto_restoration2 <- b_status |> ungroup() |> dplyr::select(-spp) |>
+  filter(carbon_weight >0) |>
+  filter(future == "f455") |>
   left_join(c_perc |> ungroup() |> dplyr::select(-spp)) |>
   ggplot(aes(x = improved*100, y = rep_diff)) +
   geom_line(aes(linetype = scenario, alpha = country_contraint), lwd = 1) +
@@ -615,7 +621,8 @@ ggsave(filename = 'figures/updated/pareto_restoration.png', plot = pareto_restor
 
 basline <- plotting_data |> filter(action == "restore",
                                    scenario == "Baseline",
-                                   country_TF == "FLEX") |>
+                                   country_TF == "FLEX",
+                                   future == "f455.csv") |>
   mutate(type = ifelse(maes_label== "Cropland", "Cropland \n de-intensification",
                        ifelse(maes_label %in% c("Pasture"), "Pasture \n de-intensification",
                               ifelse(maes_label %in% c("WoodlandForest"), "Forestry \n de-intensification",
@@ -625,7 +632,8 @@ basline <- plotting_data |> filter(action == "restore",
 
 hn <-plotting_data |> filter(action == "restore",
                              scenario == "HN",
-                             country_TF == "FLEX") |>
+                             country_TF == "FLEX",
+                             future == "f455.csv") |>
   mutate(type = ifelse(maes_label== "Cropland", "Cropland \n de-intensification",
                        ifelse(maes_label %in% c("Pasture"), "Pasture \n de-intensification",
                               ifelse(maes_label %in% c("WoodlandForest"), "Forestry \n de-intensification",
@@ -639,7 +647,9 @@ hn |>
   mutate(perc = value/41046*100) |>
   arrange(-value)
 
-hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv") |>
+basline |> filter() |> arrange(-value)
+hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv",
+                                                      carbon >0) |>
   ggplot() + geom_boxplot(aes(y = value/10, x = type, col = scenario, )) +
   theme_classic() +
   coord_flip() +
@@ -647,6 +657,18 @@ hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv") |>
                           axis.text.y = element_text(angle = 90))+
   labs(y = "area (1000 km^2)") +
   scale_color_manual(values = c("grey2", "grey"))
+
+hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv",
+                                                      carbon >0,
+                                                      carbon == 0.3) |>
+  ggplot() + geom_col(aes(y = value/10, x = type, fill = scenario), position =position_dodge(.7),
+                      width = 0.6) +
+  theme_classic() +
+  coord_flip() +
+  theme(axis.title.y =element_blank(),
+        axis.text.y = element_text(angle = 90))+
+  labs(y = "area (1000 km^2)") +
+  scale_fill_manual(values = c( "grey", "grey2"))
 
 ggsave("figures/updated/hn_baseline_box.png", hn_baseline_box,
        height = 4, width = 3.75)
@@ -749,8 +771,8 @@ rest_biodiv <- rep_formatted |>
   group_by(speciesgroup, scenario, target_met, carbon_weight) |>
   count() |> pivot_wider(names_from = target_met, values_from = n) |>
   mutate(perc_met = yes/(yes+no)) |>
-  #left_join(lj_biodiv_ic) |>
-  #mutate(perc_met_rel = (perc_met - perc_met_IC)*100) |>
+  left_join(lj_biodiv_ic) |>
+  mutate(perc_met_rel = (perc_met - perc_met_IC)*100) |>
   left_join(spp) |>
   #mutate(country_contraint = ifelse(country_contraint == "EVEN", "I",
                                   #  ifelse(country_contraint == "FLEX", "II", "III"))) |>
@@ -759,20 +781,20 @@ rest_biodiv <- rep_formatted |>
 
 
 # Box plot facetted by "dose"
-rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met",
+rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met_rel",
                                 color = "scenario",
                                 add = "jitter",
                                 facet.by = "speciesgroup", nrow = 1,
                                 short.panel.labs = TRUE, scales = "free") +
   # stat_compare_means(aes(label = ..p.signif..))  +
   theme_classic() +
-  scale_color_manual(values = c( "grey", "grey2", "red")) +
+  scale_color_manual(values = c( "grey", "grey2", "darkred")) +
   theme(legend.position = "none") +
-  labs(x = "", y = "percent of species targets met") +
+  labs(x = "", y = "percent of species targets met \n relative to initial conditions") +
   theme(axis.text.x = element_text(size = 12, angle = 45, hjust =1)) #+
 #scale_y_continuous(breaks=equal_breaks(n=10, s=0.1))
 
-ggsave("figures/updated/rest-spp.png",burden_biodiv_plot, width=8 , height = 3.2, dpi = 300)
+ggsave("figures/updated/rest-spp.png",rest_biodiv_plot, width=8 , height = 3.2, dpi = 300)
 
 ########## pareto ######
 pareto_scenario <- rep |> filter(target >0) |>

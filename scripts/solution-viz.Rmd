@@ -25,7 +25,7 @@ Read in one of the solution
 
 ```{r}
 sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
-solution <- read_csv(sol[[1]]) |>
+solution <- read_csv(sol[[3]]) |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 
 ic <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |> rename(pu = PUID)
@@ -77,7 +77,11 @@ solution_table <- pu_in_EU |> rename(id = pu) |> #plot_data |>
 
 solution_table_plot <- solution_table |> 
   mutate(zone = name) |>
-  separate(name, c('maes_label', 'intensity', 'action'), sep = "_")
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
+  mutate(maes_label = ifelse(maes_label %in% c("RiversLakes", "MarineTransitional"), "RiversLakesMarine", maes_label)) |>
+  mutate(zone = paste0(maes_label,"_", intensity,"_", action)) |>
+  group_by(id, maes_label, intensity, action) |> mutate(value = value) |> ungroup() |>
+  unique()
 ```
 
 Quick bar plot of zones
@@ -129,9 +133,9 @@ solution_raster <- fasterize(st_as_sf(solution_table_plot), PU_plot, field = "va
 solution_raster <- rast(solution_raster)
 names(solution_raster)
 
-restore <- c(1,2,6,3,4,5,7,8,9,10)
-produce <- c(13:18, 26)
-conserve <- c(19:25,12)
+restore <- c(1:10)
+produce <- c(12:18,25)
+conserve <- c(19:24)
 ```
 
 Color stuff
@@ -151,14 +155,34 @@ produce <- solution_raster[[produce]]
 Just a check to make sure the solutions are summing to 1...
 
 ```{r}
-solu_sum <- app(solution_raster, 'sum')
+solu_sum <- app(rast(solution_raster), 'sum')
 plot(solu_sum)
 ```
 
 Check out restoration zones and overall restoration
 
+```{r}
+library(colorspace)
+library(scico)
+cols.v <- c("grey",scico(20, direction = -1,palette = "batlow"))
+#colors <- c("grey", met.brewer(name="Isfahan1",n=20,type="continuous"))
+
+colors <- c("grey", met.brewer(name="VanGogh3",n=20,type="continuous"))
+myPal <- colors
+myTheme <- rasterTheme(region = myPal)
+
+p1 <- levelplot(restore, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
+
+p2 <- levelplot(conserve, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
+
+p3 <- levelplot(produce, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
+
+solu_sum <- app(solution_raster, 'sum')
+plot(solu_sum)
+```
+
 ```{r restzones, fig.width=10, fig.height = 5, dpi = 400}
-levelplot(restore, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
+p1
 ```
 
 ```{r rest_ov, fig.width=5, fig.height = 5.5, dpi = 400}
@@ -181,7 +205,6 @@ Check out production zones and overall production
 
 ```{r prodzones, fig.width=10, fig.height = 5, dpi = 400}
 levelplot(produce, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
-
 ```
 
 ```{r prod_ov, fig.width=5, fig.height = 5.5, dpi = 400}
@@ -190,11 +213,13 @@ plot(prod_agg, col = colors)
 ```
 
 reshuffling
-```{r fig.width=6, fig.height = 6, dpi = 400}}
+```{r fig.width=6, fig.height = 6, dpi = 400}
 solution_rs <- solution |>
   pivot_longer(-id) |>
   rename(value_sol = value) |>
   separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
+  mutate(maes_label = ifelse(maes_label %in% c("RiversLakes", "MarineTransitional"), "RiversLakesMarine", maes_label)) |>
+  #mutate(zone = paste0(maes_label,"_", intensity,"_", action)) |>
   mutate(name = paste0(maes_label,"_", intensity))
 
 solution_rs <- solution_rs |>
@@ -207,6 +232,7 @@ unique(solution_rs$name)
 ic_rs <- ic |> dplyr::select(-Status) |>
   pivot_longer(-id) |>
   rename(value_ic = value) |>
+  mutate(name = ifelse(name %in% c("MarineTransitional_natural", "RiversLakes_natural"), "RiversLakesMarine_natural", name)) |>
   full_join(solution_rs) |> mutate(value_ic = replace_na(value_ic,0),
                 value_sol= replace_na(value_sol, 0),
                 diff = value_sol- value_ic) |> dplyr::select(-c(value_sol,value_ic))
@@ -219,39 +245,6 @@ ic_rs |>
 
 ```
 
-```{r}
-solution_table <- pu_in_EU |> rename(id = pu) |> #plot_data |> 
-  left_join(PU_template) |> 
-  dplyr::select(-id) |>
-  rename(id = EU_id) |>
-  left_join(ic_rs_wide) |> 
-  pivot_longer(-c(nuts2id:geometry)) |>
-  filter(name %in% c("WoodlandForest_prod", "Cropland_high", "Pasture_high"))
 
-solution_table |> mutate(shuffle = ifelse(value>0, "positive", "negative")) |>
-  group_by(nuts2id, name, shuffle) |> summarise(value = sum(value)) |> ungroup() |>
-  pivot_wider(names_from = shuffle, values_from = value) |>
-  #mutate(diff = positive/(positive + abs(negative))*100) |>
-  ggplot(aes(x = positive, y = negative*-1, color = name)) + 
-  geom_point()
-  
-rs_raster <- fasterize(st_as_sf(solution_table), PU_plot, field = "value", by = "name")
-rs_raster <- rast(rs_raster)
-
-plot(rs_raster)
-```
-
-```{r}
-library(RStoolbox)
-
-ggR(rs_raster, layer = 2, maxpixels = 1e10,forceCat = FALSE,
-          geom_raster = TRUE, coord_equal = TRUE,stretch = "none", ggObj = TRUE) +
-  ggthemes::theme_map(base_size = 11,base_family = 'Arial') +
-  scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
-                   guide = guide_colorbar(title = "crop Difference",ticks = FALSE) ) +
-  theme(legend.position = c(.05,.15),legend.background = element_rect(fill = 'transparent'),
-        plot.title = element_text(size = 23, hjust = .5),plot.subtitle = element_text(hjust = .5)) +
-  labs(x = "", y = "")
-```
 
 
