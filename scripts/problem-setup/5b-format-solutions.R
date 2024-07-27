@@ -16,7 +16,6 @@ pu <- read_fst("data/formatted-data/pu_data.fst") |>
   dplyr::select(-c(pu, nuts2id)) |>
   drop_na(id)
 
-
 rij <- read_fst("data/formatted-data/features_split.fst") |>
   rename(species = feature) |>
   #mutate(amount = round(amount)) |>
@@ -24,14 +23,16 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
   mutate(pu = EU_id) |>
   dplyr::select(pu, species, zone, amount) |>
   drop_na(pu) |>
-  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
   mutate(amount = replace_na(amount, 0))
 
 rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
 ## Calculate representation and save
 
-filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
+filelist_temp <- list.files("data-formatted/sol/NUTSadj",
+                            pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"),
+                            full.names = T)
 shortfalls <- list()
+
 #  join targets and spp info
 for (i in 1:length(filelist_temp)) {
   filenm <- unlist(strsplit(filelist_temp[[i]], "_"))
@@ -72,9 +73,9 @@ for (i in 1:length(filelist_temp)) {
 
 
 shortfalls <- bind_rows(shortfalls, .id = "column_label")
-write_csv(shortfalls, "data/solutions/representation_REF_f455_scenarios_version3.csv")
 
-glimpse(shortfalls)
+write_csv(shortfalls, "data/solutions/representation_REF_f455_scenarios_proportional.csv")
+
 
 zones <- read_csv("data/formatted-data/zone_id.csv") |>
   filter(id >11) |>
@@ -95,6 +96,9 @@ LC <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv") |>
   dplyr::select(-zone) |>
   rename(zone = id)
 
+rij |> filter(zone >15 & species != "999999")
+
+
 rij_sol <- rij |>
   left_join(LC, by = c("pu", "zone"))
 
@@ -112,8 +116,6 @@ contribution <- rij_sol |>
   mutate(spp = ifelse(species != 999999, "biodiv", "carbon"))
 
 write_csv(contribution, "data/solutions/representation_IC.csv")
-
-
 
 
 ## Save as raster stack
@@ -168,7 +170,9 @@ PU_template_EU <- pu_in_EU |>
   dplyr::select(-id) |>
   rename(id = EU_id)
 
-filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
+filelist_temp <- list.files("data-formatted/sol/",
+                            pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"),
+                            full.names = T)
 filelist_nm <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"))
 solution_scenarios <- list()
 zones <- read_csv("data/formatted-data/zone_id.csv") |>

@@ -1,5 +1,3 @@
-# work in progress!
-
 #remotes::install_github("cboettig/prioritizr")
 library(prioritizr)
 library(fst)
@@ -7,11 +5,14 @@ library(highs)
 library(tidyverse)
 library(sf)
 library(furrr)
+library(gurobi)
 
 rm(list = ls())
 
 cores <- 7
 fst::threads_fst(nr_of_threads = cores, reset_after_fork = NULL)  # Set number for fst
+
+setwd(dir = "~/EU-restoration-prioritization/") # to run in terminal...
 
 ########## function to set up, solve, and save solution #################
 
@@ -24,8 +25,8 @@ problem_setup <- function(
     carbon_weight = 0.5,
     restoration_constraint = 0.141,
     #conservation_constraint = 0.3,
-    production_constraints = TRUE,
-    country_constraints = "EVEN", # EVEN, FLEX, UNEVEN
+    production_constraints = "NUTS2adj", #NUTS2, NUTS2adj, COUNTRY
+    country_constraints = "UNEVEN", # EVEN, FLEX, UNEVEN
     restoration_only = FALSE,
     wetlands = TRUE,
     nuts2_shp,
@@ -34,7 +35,8 @@ problem_setup <- function(
     restoration_scenario,
     future = "f455", #f455, ref
     name,
-    solver = "gurobi" #high, gurobi
+    solver = "gurobi",
+    SI = FALSE
 )
 {
   # FEATURE WEIGHTS matrix
@@ -46,6 +48,19 @@ problem_setup <- function(
 
   targs_filtered <- targs |> dplyr::select(-weight)
 
+  if(restoration_only == TRUE) {
+    manual_bounded_constraints <- manual_bounded_constraints |>
+      mutate(upper = ifelse(zone %in% c("z12", "z13", "z14", "z15",
+                                        "z16", "z17", "z18", "z19", "z20",
+                                        "z21", "z22", "z23", "z23", "z24",
+                                        "z25"), 0,  upper)) |>
+      mutate(lower = ifelse(zone %in% c("z12", "z13", "z14", "z15",
+                                        "z16", "z17", "z18", "z19", "z20",
+                                        "z21", "z22", "z23", "z23", "z24",
+                                        "z25"), 0,  lower))
+  }
+
+  # if no gurobi license, not recommended for lots of scenarios
   if(solver == "highs") {
     p_solve <- p |>
       add_proportion_decisions() |>
@@ -55,6 +70,7 @@ problem_setup <- function(
       add_manual_bounded_constraints(manual_bounded_constraints) |>
       add_feature_weights(features_weighted)
   }
+
   if(solver == "gurobi") {
     p_solve <- p |>
       add_proportion_decisions() |>
@@ -71,17 +87,20 @@ problem_setup <- function(
     as.matrix() |>
     replace_na(0)
 
-
+  # no more than a bit over the restoration goal of ~14%
   p_solve <- p_solve |>
     add_linear_constraints(threshold = nrow(pu)*restoration_constraint*1.01,
                            sense = "<=",
                            data = restoration)
 
+  # no less than restoration 75% restoration target
   p_solve <- p_solve |>
-    add_linear_constraints(threshold = nrow(pu)*restoration_constraint*0.9,
+    add_linear_constraints(threshold = nrow(pu)*restoration_constraint*0.50,
                            sense = ">=",
                            data = restoration)
 
+
+  # deintensify ag, little nature restoration
   if(restoration_scenario == "Baseline"){
     p_solve <- p_solve |>
       add_linear_constraints(threshold = nrow(pu)*0.07,
@@ -100,6 +119,8 @@ problem_setup <- function(
                              sense = "<=",
                              data = restoration_wetland)
   }
+
+  # high nature scenario
   if(restoration_scenario == "HN"){
     p_solve <- p_solve |>
       add_linear_constraints(threshold = nrow(pu)*0.05,
@@ -118,6 +139,8 @@ problem_setup <- function(
                              sense = "<=",
                              data = restoration_wetland)
   }
+
+
   # country constraints for restoration
   if(country_constraints == "EVEN"){
 
@@ -149,7 +172,8 @@ problem_setup <- function(
       #else(print("no country constraint"))
     }
   }
-    # country constraints for restoration
+
+
   if(country_constraints == "FLEX"){
 
       country2 <- nuts2_shp
@@ -179,546 +203,947 @@ problem_setup <- function(
         #}
         #else(print("no country constraint"))
       }
-      if(country_constraints == "UNCONSTRAINED"){
-        p_solve <- p_solve
-      }
+  }
+
+
+  if(country_constraints == "UNEVEN"){
+    p_solve <- p_solve
   }
 
   # wetland restoration
-  for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-    nuts2 <-  nuts2_names[[i]]
 
-    nuts_wetland <- nuts2_wetland_rest |>
-      filter(NUTS_ID == nuts2) |>
-      mutate(wetlandarea = value)
+  if(wetlands == "TRUE"){
+    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+      nuts2 <-  nuts2_names[[i]]
 
-    if(nrow(nuts_wetland)>0) {
+      nuts_wetland <- nuts2_wetland_rest |>
+        filter(NUTS_ID == nuts2) |>
+        mutate(wetlandarea = value)
 
-      wetland_budget <- pu_wetland_rest_budget_data |>
-        mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-        mutate_at(vars(starts_with("z")), ~.*m) |>
-        dplyr::select(-c(m, NUTS_ID, pu)) |>
-        as.matrix() |>
-        replace_na(0)
+      if(nrow(nuts_wetland)>0) {
 
-      #threshold = nuts_wetland$wetlandarea[[1]]/10
+        wetland_budget <- pu_wetland_rest_budget_data |>
+          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+          mutate_at(vars(starts_with("z")), ~.*m) |>
+          dplyr::select(-c(m, NUTS_ID, pu)) |>
+          as.matrix() |>
+          replace_na(0)
 
-      p_solve <- p_solve |>
-        add_linear_constraints(threshold = nuts_wetland$wetlandarea[[1]]/10,
-                               sense = "<=",
-                               data = wetland_budget)
+        #threshold = nuts_wetland$wetlandarea[[1]]/10
+
+        p_solve <- p_solve |>
+          add_linear_constraints(threshold = nuts_wetland$wetlandarea[[1]]/10,
+                                 sense = "<=",
+                                 data = wetland_budget)
+      }
+      else(p_solve <- p_solve |>
+             add_linear_constraints(threshold = 0,
+                                    sense = "<=",
+                                    data = wetland_budget))
     }
-    else(p_solve <- p_solve |>
-           add_linear_constraints(threshold = 0,
-                                  sense = "<=",
-                                  data = wetland_budget))
+
   }
 
+
+  # allow restoration only option
+
+  if(restoration_only == FALSE){
   # define production scenario
-  if(future == "f455"){
-    nuts2_crop_low <- read_csv("data-formatted/linear_constraints/nuts_crop_low_55_adjusted.csv")
+    if(future == "f455"){
+      nuts2_crop_low <- read_csv("data/formatted-data/linear_constraints/nuts_crop_low_55_proportional.csv")
 
-    nuts2_crop_med <- read_csv("data-formatted/linear_constraints/nuts_crop_med_55_adjusted.csv")
+      nuts2_crop_med <- read_csv("data/formatted-data/linear_constraints/nuts_crop_med_55_proportional.csv")
 
-    nuts2_crop_high <- read_csv("data-formatted/linear_constraints/nuts_crop_high_55_adjusted.csv")
+      nuts2_crop_high <- read_csv("data/formatted-data/linear_constraints/nuts_crop_high_55_proportional.csv")
 
-    nuts2_pasture_high <- read_csv("data-formatted/linear_constraints/nuts_pasture_high_55_adjusted.csv")
+      nuts2_pasture_high <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_high_55_proportional.csv")
 
-    nuts2_pasture_low <- read_csv("data-formatted/linear_constraints/nuts_pasture_low_55_adjusted.csv")
+      nuts2_pasture_low <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_low_55_proportional.csv")
+
+      nuts2_forest_multi <- read_csv("data/formatted-data/linear_constraints/nuts_forest_multi_55_proportional.csv")
+
+      nuts2_forest_prod <- read_csv("data/formatted-data/linear_constraints/nuts_forest_prod_55_proportional.csv")
+
+      country_prod_constraints <- read_csv("data/formatted-data/linear_constraints/country_constraints_55_proportional.csv")
+
+      # deal with in-feasible nuts2
+
+      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455.csv") |>
+        mutate(adj = ifelse(TF =="FALSE", 1,0))
+
+      if(production_constraints %in% c("NUTS2adj", "NUTS2")){
+
+        # crop low nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <-  nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_low |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |> drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_low_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop low constraint"))
+        }
+
+        # crop med nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_med |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_med_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj, #/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop med constraint"))
+        }
+
+        #crop high nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_high |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_high_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop high constraint"))
+        }
+
+        # Pasture low nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_pasture <- nuts2_pasture_low |>
+            mutate(pasturearea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(value = replace_na(value, 0),
+                   pasturearea = replace_na(pasturearea,0))|>
+            mutate(pasturearea = ifelse(value < 1, 0, value))
+
+          if(nrow(nuts_pasture)>0) {
+
+            pasture_budget <- pu_pasture_low_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]*adj,
+                                     sense = ">=",
+                                     data = pasture_budget)
+            print(nuts2)
+          }
+          else(print("no pasture low constraint"))
+        }
+
+        # pasture high nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_pasture <- nuts2_pasture_high |>
+            mutate(pasturearea = replace_na(value,0)) |>drop_na() |>
+            filter(NUTS_ID == nuts2) |>
+            mutate(value = replace_na(value, 0),
+                   pasturearea = replace_na(pasturearea,0))|>
+            mutate(pasturearea = ifelse(value < 1, 0, value))
+
+          if(nrow(nuts_pasture)>0) {
+
+            pasture_budget <- pu_pasture_high_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = pasture_budget)
+            print(nuts2)
+          }
+          else(print("no pasture high constraint"))
+        }
+
+        # forest multi nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_forest <- nuts2_forest_multi |>drop_na() |>
+            mutate(forestarea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2)
+
+          if(nrow(nuts_forest)>0.01) {
+
+            forest_budget <- pu_forest_multi_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            forest_threshold <- nuts_forest$forestarea[[1]]*adj#/10*adj
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = forest_threshold,
+                                     sense = ">=",
+                                     data = forest_budget)
+            print(nuts2)
+          }
+          else(print("no forest multi constraint"))
+        }
+
+        # forest production nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_forest <- nuts2_forest_prod |>
+            mutate(forestarea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2)
+
+          if(nrow(nuts_forest)>0.01) {
+
+            forest_budget <- pu_forest_prod_budget_data |>drop_na() |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            forest_threshold <- nuts_forest$forestarea[[1]]*adj #/10*adj)
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = forest_threshold,
+                                     sense = ">=",
+                                     data = forest_budget)
+            print(nuts2)
+
+          }
+          else(print("no forest prod constraint"))
+        }
 
-    nuts2_forest_multi <- read_csv("data-formatted/linear_constraints/nuts_forest_multi_55_adjusted.csv")
-
-    nuts2_forest_prod <- read_csv("data-formatted/linear_constraints/nuts_forest_prod_55_adjusted.csv")
-
-    # deal with infeasible nuts2
-
-    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/f455_feas_adj.csv")
-
-    # crop low
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <-  nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_low |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_low_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop low constraint"))
-    }
-
-    # crop med
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_med |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_med_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop med constraint"))
-    }
-
-    #crop high
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_high |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_high_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop high constraint"))
-    }
-
-    #   # Pasture low
-    #
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-
-      nuts_pasture <- nuts2_pasture_low |>
-        mutate(pasturearea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(value = replace_na(value, 0),
-               pasturearea = replace_na(pasturearea,0))|>
-        mutate(pasturearea = ifelse(value < 1, 0, value))
-
-      if(nrow(nuts_pasture)>0) {
-
-        pasture_budget <- pu_pasture_low_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = pasture_budget)
-        print(nuts2)
-      }
-      else(print("no pasture low constraint"))
-    }
-
-    #   # Pasture high
-    #
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_pasture <- nuts2_pasture_high |>
-        mutate(pasturearea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(value = replace_na(value, 0),
-               pasturearea = replace_na(pasturearea,0))|>
-        mutate(pasturearea = ifelse(value < 1, 0, value))
-
-      if(nrow(nuts_pasture)>0) {
-
-        pasture_budget <- pu_pasture_high_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = pasture_budget)
-        print(nuts2)
-      }
-      else(print("no pasture high constraint"))
-    }
-
-    #
-    # # # Forest multi
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_forest <- nuts2_forest_multi |>
-        mutate(forestarea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2)
-
-      if(nrow(nuts_forest)>0.01) {
-
-        forest_budget <- pu_forest_multi_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10<1, 0,
-                                   nuts_forest$forestarea[[1]]/10*adj)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = forest_threshold,
-                                 sense = ">=",
-                                 data = forest_budget)
-        print(nuts2)
-      }
-      else(print("no forest multi constraint"))
-    }
-    #
-    #   # # Forest prod
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_forest <- nuts2_forest_prod |>
-        mutate(forestarea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2)
-
-      if(nrow(nuts_forest)>0.01) {
-
-        forest_budget <- pu_forest_prod_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10< 1, 0,
-                                   nuts_forest$forestarea[[1]]/10*adj)
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = forest_threshold,
-                                 sense = ">=",
-                                 data = forest_budget)
-        print(nuts2)
-
-      }
-      else(print("no forest prod constraint"))
-    }
-  }
-
-  if(future == "ref"){
-    nuts2_crop_low <- read_csv("data-formatted/linear_constraints/nuts_crop_low_ref_adjusted.csv")
-
-    nuts2_crop_med <- read_csv("data-formatted/linear_constraints/nuts_crop_med_ref_adjusted.csv")
-
-    nuts2_crop_high <- read_csv("data-formatted/linear_constraints/nuts_crop_high_ref_adjusted.csv")
-
-    nuts2_pasture_high <- read_csv("data-formatted/linear_constraints/nuts_pasture_high_ref_adjusted.csv")
-
-    nuts2_pasture_low <- read_csv("data-formatted/linear_constraints/nuts_pasture_low_ref_adjusted.csv")
-
-    nuts2_forest_multi <- read_csv("data-formatted/linear_constraints/nuts_forest_multi_ref_adjusted.csv")
-
-    nuts2_forest_prod <- read_csv("data-formatted/linear_constraints/nuts_forest_prod_ref_adjusted.csv")
-
-    # deal with infeasible nuts2
-
-    infeas_nuts2 <- read_csv("data-formatted/feasibility-tests/ref_feas_adj.csv")
-
-    # crop low
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <-  nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_low |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_low_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop low constraint"))
-    }
-
-    # crop med
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_med |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_med_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop med constraint"))
-    }
-
-    #crop high
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_crop <- nuts2_crop_high |>
-        mutate(croparea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
-
-      if(nrow(nuts_crop)>0) {
-
-        crop_budget <- pu_cropland_high_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_crop$croparea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = crop_budget)
-        print(nuts2)
-      }
-      else(print("no crop high constraint"))
-    }
-
-
-    #   # Pasture low
-    #
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_pasture <- nuts2_pasture_low |>
-        mutate(pasturearea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(value = replace_na(value, 0),
-               pasturearea = replace_na(pasturearea,0))|>
-        mutate(pasturearea = ifelse(value < 1, 0, value))
-
-      if(nrow(nuts_pasture)>0) {
-
-        pasture_budget <- pu_pasture_low_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = pasture_budget)
-        print(nuts2)
-      }
-      else(print("no pasture low constraint"))
-    }
-
-    #   # Pasture high
-    #
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_pasture <- nuts2_pasture_high |>
-        mutate(pasturearea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2) |>
-        mutate(value = replace_na(value, 0),
-               pasturearea = replace_na(pasturearea,0))|>
-        mutate(pasturearea = ifelse(value < 1, 0, value))
-
-      if(nrow(nuts_pasture)>0) {
-
-        pasture_budget <- pu_pasture_high_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]/10*adj,
-                                 sense = ">=",
-                                 data = pasture_budget)
-        print(nuts2)
-      }
-      else(print("no pasture high constraint"))
-    }
-
-    #
-    # # # Forest multi
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_forest <- nuts2_forest_multi |>
-        mutate(forestarea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2)
-
-      if(nrow(nuts_forest)>0.01) {
-
-        forest_budget <- pu_forest_multi_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10<1, 0,
-                                   nuts_forest$forestarea[[1]]/10*adj)
-
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = forest_threshold,
-                                 sense = ">=",
-                                 data = forest_budget)
-        print(nuts2)
-      }
-      else(print("no forest multi constraint"))
-    }
-    #
-    #   # # Forest prod
-
-    for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
-      nuts2 <- nuts2_names[[i]]
-      adj <- infeas_nuts2 |> filter(nuts == nuts2)
-      adj <- adj$adj[1]
-
-      nuts_forest <- nuts2_forest_prod |>
-        mutate(forestarea = replace_na(value,0)) |>
-        filter(NUTS_ID == nuts2)
-
-      if(nrow(nuts_forest)>0.01) {
-
-        forest_budget <- pu_forest_prod_budget_data |>
-          mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
-          mutate_at(vars(starts_with("z")), ~.*m) |>
-          dplyr::select(-c(m, NUTS_ID, pu)) |>
-          as.matrix() |>
-          replace_na(0)
-
-        forest_threshold <- ifelse(nuts_forest$forestarea[[1]]/10< 1, 0,
-                                   nuts_forest$forestarea[[1]]/10*adj)
-        p_solve <- p_solve |>
-          add_linear_constraints(threshold = forest_threshold,
-                                 sense = ">=",
-                                 data = forest_budget)
-        print(nuts2)
 
       }
-      else(print("no forest prod constraint"))
+
+      if(production_constraints %in% c("NUTS2adj", "COUNTRY")) {
+
+        country_names <- unique(nuts2_shp$country)
+
+        # crop low country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_low"
+          country_budget <- pu_cropland_low_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # crop med country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_med"
+          country_budget <- pu_cropland_med_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # crop high country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_high"
+          country_budget <- pu_cropland_high_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # pasture low country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Pasture_low"
+          country_budget <- pu_pasture_low_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # pasture high country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Pasture_high"
+          country_budget <- pu_pasture_high_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # forest multi country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "WoodlandForest_multi"
+          country_budget <- pu_forest_multi_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # forest production country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "WoodlandForest_prod"
+          country_budget <- pu_forest_prod_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+      }
+
     }
 
-  }
+    if(future == "ref"){
+      nuts2_crop_low <- read_csv("data/formatted-data/linear_constraints/nuts_crop_low_ref_proportional.csv")
 
+      nuts2_crop_med <- read_csv("data/formatted-data/linear_constraints/nuts_crop_med_ref_proportional.csv")
+
+      nuts2_crop_high <- read_csv("data/formatted-data/linear_constraints/nuts_crop_high_ref_proportional.csv")
+
+      nuts2_pasture_high <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_high_ref_proportional.csv")
+
+      nuts2_pasture_low <- read_csv("data/formatted-data/linear_constraints/nuts_pasture_low_ref_proportional.csv")
+
+      nuts2_forest_multi <- read_csv("data/formatted-data/linear_constraints/nuts_forest_multi_ref_proportional.csv")
+
+      nuts2_forest_prod <- read_csv("data/formatted-data/linear_constraints/nuts_forest_prod_ref_proportional.csv")
+
+      country_prod_constraints <- read_csv("data/formatted-data/linear_constraints/country_constraints_ref_proportional.csv")
+
+      # deal with in-feasible nuts2
+
+      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_ref.csv") |>
+        mutate(adj = ifelse(TF =="FALSE", 1,0))
+
+      if(production_constraints %in% c("NUTS2adj", "NUTS2")){
+
+        # crop low nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <-  nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_low |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |> drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_low_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop low constraint"))
+        }
+
+        # crop med nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_med |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_med_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj, #/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop med constraint"))
+        }
+
+        #crop high nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_crop <- nuts2_crop_high |>
+            mutate(croparea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(croparea = ifelse(value < 1, 0, value)) #ES63 is <1 PU and is driving an infeasibility here
+
+          if(nrow(nuts_crop)>0) {
+
+            crop_budget <- pu_cropland_high_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_crop$croparea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = crop_budget)
+            print(nuts2)
+          }
+          else(print("no crop high constraint"))
+        }
+
+        # Pasture low nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_pasture <- nuts2_pasture_low |>
+            mutate(pasturearea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2) |>drop_na() |>
+            mutate(value = replace_na(value, 0),
+                   pasturearea = replace_na(pasturearea,0))|>
+            mutate(pasturearea = ifelse(value < 1, 0, value))
+
+          if(nrow(nuts_pasture)>0) {
+
+            pasture_budget <- pu_pasture_low_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]*adj,
+                                     sense = ">=",
+                                     data = pasture_budget)
+            print(nuts2)
+          }
+          else(print("no pasture low constraint"))
+        }
+
+        # pasture high nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_pasture <- nuts2_pasture_high |>
+            mutate(pasturearea = replace_na(value,0)) |>drop_na() |>
+            filter(NUTS_ID == nuts2) |>
+            mutate(value = replace_na(value, 0),
+                   pasturearea = replace_na(pasturearea,0))|>
+            mutate(pasturearea = ifelse(value < 1, 0, value))
+
+          if(nrow(nuts_pasture)>0) {
+
+            pasture_budget <- pu_pasture_high_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = nuts_pasture$pasturearea[[1]]*adj,#/10*adj,
+                                     sense = ">=",
+                                     data = pasture_budget)
+            print(nuts2)
+          }
+          else(print("no pasture high constraint"))
+        }
+
+        # forest multi nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_forest <- nuts2_forest_multi |>drop_na() |>
+            mutate(forestarea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2)
+
+          if(nrow(nuts_forest)>0.01) {
+
+            forest_budget <- pu_forest_multi_budget_data |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            forest_threshold <- nuts_forest$forestarea[[1]]*adj#/10*adj
+
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = forest_threshold,
+                                     sense = ">=",
+                                     data = forest_budget)
+            print(nuts2)
+          }
+          else(print("no forest multi constraint"))
+        }
+
+        # forest production nuts2
+        for(i in 1:length(nuts2_names)) { #length(nuts2_AT_names)
+          nuts2 <- nuts2_names[[i]]
+          adj <- infeas_nuts2 |> filter(nuts == nuts2)
+          adj <- adj$adj[1]
+
+          nuts_forest <- nuts2_forest_prod |>
+            mutate(forestarea = replace_na(value,0)) |>
+            filter(NUTS_ID == nuts2)
+
+          if(nrow(nuts_forest)>0.01) {
+
+            forest_budget <- pu_forest_prod_budget_data |>drop_na() |>
+              mutate(m = ifelse(NUTS_ID == nuts2, 1, 0)) |>
+              mutate_at(vars(starts_with("z")), ~.*m) |>
+              dplyr::select(-c(m, NUTS_ID, pu)) |>
+              as.matrix() |>
+              replace_na(0)
+
+            forest_threshold <- nuts_forest$forestarea[[1]]*adj #/10*adj)
+            p_solve <- p_solve |>
+              add_linear_constraints(threshold = forest_threshold,
+                                     sense = ">=",
+                                     data = forest_budget)
+            print(nuts2)
+
+          }
+          else(print("no forest prod constraint"))
+        }
+
+
+      }
+      else(p_solve)
+
+      if(production_constraints %in% c("NUTS2adj", "COUNTRY"))
+      {
+
+        country_names <- unique(nuts2_shp$country)
+
+        # crop low country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_low"
+          country_budget <- pu_cropland_low_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # crop med country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_med"
+          country_budget <- pu_cropland_med_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # crop high country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Cropland_high"
+          country_budget <- pu_cropland_high_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # pasture low country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Pasture_low"
+          country_budget <- pu_pasture_low_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # pasture high country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "Pasture_high"
+          country_budget <- pu_pasture_high_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # forest multi country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "WoodlandForest_multi"
+          country_budget <- pu_forest_multi_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+
+        # forest production country
+        for(i in 1:length(country_names)) {
+          country2 <- country_names[[i]]
+
+          #if(nrow(nuts_crop)>0) {
+          production_zone <- "WoodlandForest_prod"
+          country_budget <- pu_forest_prod_budget_data |>
+            mutate(country = substr(NUTS_ID, 1, 2)) |>
+            mutate(m = ifelse(country == country2, 1, 0)) |>
+            mutate_at(vars(starts_with("z")), ~.*m) |>
+            dplyr::select(-c(m, country, pu, NUTS_ID)) |>
+            as.matrix() |>
+            replace_na(0)
+
+          country_threshhold <- country_prod_constraints |>
+            filter(country == country2) |>
+            filter(name == production_zone)
+
+          p_solve <- p_solve |>
+            add_linear_constraints(threshold = country_threshhold$value[[1]],
+                                   sense = ">=",
+                                   data = country_budget)
+          #}
+          #else(print("no country constraint"))
+        }
+      }        #}
+        #else(print("no country constraint"))
+      }
+
+    }
+
+  # country constraints for restoration
   # solve
   s <- solve(p_solve)
 
-  #ss <- s |> dplyr::select(solution_1_z1:solution_1_z26)
-
-  # save!!
-  write_csv(s, paste0("data-formatted/sol/sol_carbon_",carbon_weight,
+  if(SI == FALSE){
+    # save!
+    write_csv(s, paste0("data-formatted/sol/NUTSadj/sol_carbon_",
+                        carbon_weight,
+                        "_restoration_", restoration_constraint,
+                        "_production_", production_constraints,
+                        "_country_", country_constraints,
+                        "_wetlands_", "TRUE",
+                        "_onlyrestoration_", restoration_only,
+                        "_scenario_", restoration_scenario,
+                        "_", name,
+                        "_", solver,
+                        "_", future,
+                        ".csv"), append = F)
+  }
+  if(SI == TRUE){
+  # save!
+  write_csv(s, paste0("data-formatted/sol/SI-sol/sol_carbon_",
+                      carbon_weight,
                       "_restoration_", restoration_constraint,
                       "_production_", production_constraints,
                       "_country_", country_constraints,
-                      "_wetlands_", wetlands,
+                      "_wetlands_", "TRUE",
                       "_onlyrestoration_", restoration_only,
                       "_scenario_", restoration_scenario,
                       "_", name,
                       "_", solver,
                       "_", future,
-                      ".csv"))
+                      ".csv"), append = F)
+  }
 }
 
-######### load in and some minor formating of data ################
-
+######### load in and some minor formatting of data ################
 pu_in_EU <- read_csv("data-formatted/pu_in_EU.csv")
 
 pu <- read_fst("data-formatted/pu_data.fst") |>
@@ -728,7 +1153,7 @@ pu <- read_fst("data-formatted/pu_data.fst") |>
   drop_na(id)
 
 
-rij <- read_fst("data-formatted/features_split.fst") |>
+rij <- read_fst("data/formatted-data/features_split.fst") |>
   rename(species = feature) |>
   #mutate(amount = round(amount)) |>
   left_join(pu_in_EU) |>
@@ -794,7 +1219,7 @@ names$speciesname <- sub(" ", "_", names$speciesname)
 # <4% mismatch between the features we have in the rij table and the features
 # we have targets for (due to small outstanding mismatches in spp names)
 
-targs_existing <- read_csv("data-formatted/targets_split.csv") |>
+targs_existing <- read_csv("data/formatted-data/targets_split.csv") |>
   mutate(zone = list(z$name)) |>
   #dplyr::filter(feature %in% feat$name) |>
   mutate(target = ifelse(target > 100000, target/100, target),
@@ -827,10 +1252,14 @@ targs <- targs |> left_join(targs_rm) |>
 
 # all the constraints
 
-manual_bounded_constraints <- read_csv("data-formatted/manual_bounded_constraints_production_globiom_flex.csv") |>
+manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_CLC.csv") |>
+  rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
   left_join(zones) |>
-  dplyr::select(-c(zone, nuts2id)) |>
-  rename(zone=name) |>
+  mutate(zone = name) |>
+  dplyr::select(-c(name, EU_id, nuts2id)) |>
+  #rename(zone=name) |>
   dplyr::select(pu, zone, lower, upper) |>
   drop_na() |>
   # allow production expansion to meet targets
@@ -838,38 +1267,39 @@ manual_bounded_constraints <- read_csv("data-formatted/manual_bounded_constraint
   mutate(upper = ifelse(zone == "z14", 1, upper)) |>
   mutate(upper = ifelse(zone == "z18", 1, upper)) |>
   mutate(lower = ifelse(zone == "z5", 0, lower)) |>
-  mutate(upper = ifelse(zone == "z5", 0, upper))
+  mutate(upper = ifelse(zone == "z5", 0, upper)) |>
+  mutate(lower = ifelse(lower >upper, upper, lower)) |>
+  mutate(lower = ifelse(zone %in% c("z23", "z24"), upper, lower))
 
 # all the constraints
+pu_cropland_low_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_low_budget_data.csv")
 
-pu_cropland_low_budget_data <- read_csv("data-formatted/linear_constraints/pu_crop_low_budget_data_55.csv")
+pu_cropland_med_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_med_budget_data_55.csv")
 
-pu_cropland_med_budget_data <- read_csv("data-formatted/linear_constraints/pu_crop_med_budget_data_55.csv")
+pu_cropland_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_high_budget_data_55.csv")
 
-pu_cropland_high_budget_data <- read_csv("data-formatted/linear_constraints/pu_crop_high_budget_data_55.csv")
+pu_pasture_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_high_budget_data_55.csv")
 
-pu_pasture_high_budget_data <- read_csv("data-formatted/linear_constraints/pu_pasture_high_budget_data_55.csv")
+pu_pasture_low_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data_55.csv")
 
-pu_pasture_low_budget_data <- read_csv("data-formatted/linear_constraints/pu_pasture_low_budget_data_55.csv")
+pu_forest_multi_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_multi_budget_data_55.csv")
 
-pu_forest_multi_budget_data <- read_csv("data-formatted/linear_constraints/pu_forest_multi_budget_data_55.csv")
+pu_forest_prod_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_prod_budget_data_55.csv")
 
-pu_forest_prod_budget_data <- read_csv("data-formatted/linear_constraints/pu_forest_prod_budget_data_55.csv")
-
-nuts2_wetland_rest <- read_csv("data-formatted/linear_constraints/wetland_targets.csv")
-pu_wetland_rest_budget_data <- read_csv("data-formatted/linear_constraints/pu_wetland_rest_budget_data.csv")
+nuts2_wetland_rest <- read_csv("data/formatted-data/linear_constraints/wetland_targets.csv")
+pu_wetland_rest_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_wetland_rest_budget_data.csv")
 
 country_nuts <- pu_pasture_low_budget_data |> dplyr::select(pu, NUTS_ID)
 
 # Restoration budget breakdown
-pu_restore_natural_budget_data <- read_csv("data-formatted/linear_constraints/pu_restore_natural_budget_data.csv")
+pu_restore_natural_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_restore_natural_budget_data.csv")
 
-pu_restore_forest_budget_data <- read_csv("data-formatted/linear_constraints/pu_restore_forest_budget_data.csv")
+pu_restore_forest_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_restore_forest_budget_data.csv")
 
-pu_restore_crop_budget_data <- read_csv("data-formatted/linear_constraints/pu_restore_crop_budget_data.csv")
+pu_restore_crop_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_restore_crop_budget_data.csv")
 
 # restoration
-pu_restoration_budget_data <- read_csv("data-formatted/linear_constraints/pu_restoration_budget_data.csv")|>
+pu_restoration_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_restoration_budget_data.csv")|>
   rename(pu = layer) |>
   left_join(pu_in_EU) |>
   mutate(pu = EU_id) |>
@@ -879,7 +1309,7 @@ pu_restoration_budget_data <- read_csv("data-formatted/linear_constraints/pu_res
 
 country_nuts <- pu_pasture_low_budget_data |> dplyr::select(pu, NUTS_ID)
 
-pu_restoration_budget_data_country <- read_csv("data-formatted/linear_constraints/pu_restoration_budget_data.csv")|>
+pu_restoration_budget_data_country <- read_csv("data/formatted-data/linear_constraints/pu_restoration_budget_data.csv")|>
   rename(pu = layer) |>
   left_join(pu_in_EU) |>
   mutate(pu = EU_id) |>
@@ -916,17 +1346,38 @@ p <- problem(x = pu,
   add_min_shortfall_objective(nrow(pu))
 
 
-### solve ######
+# ### solve ######
 scenarios <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.7,0.9,1.1,1.3,1.5,1.7,1.9),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN", "FLEX", "UNCONSTRAINED"),
+    carbon_weight = 1.5, #c(0.1,0.5,0.9,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = c("EVEN", "FLEX", "UNEVEN"),
     restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
     restoration_scenario = c("Baseline", "HN"),
-    future = c("f455", "ref")
+    future = c("f455", "ref"),
+    name = "proportional",
+    SI = FALSE
   )
 
-# functionalize the for-loop contents
+scenarios_only_rest <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = 0.5,#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "FLEX",
+    restoration_constraint =  0.141,
+    wetlands = TRUE,
+    restoration_only = TRUE,
+    production_constraints = "NA",
+    restoration_scenario =  "Baseline",
+    future = "f455",
+    name = "onlyRest",
+    SI = TRUE
+  )
+
+scenarios <- scenarios |> bind_rows(scenarios_only_rest)
+#
+# # # functionalize the for-loop contents
 iter <- function(i) {
   problem_setup(
     cores = parallel::detectCores(),
@@ -935,21 +1386,24 @@ iter <- function(i) {
     targs,
     manual_bounded_constraints = manual_bounded_constraints,
     carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = 0.141,
+    restoration_constraint = scenarios$restoration_constraint[[i]],
     #conservation_constraint = 0.3,
-    production_constraints = TRUE,
+    production_constraints = scenarios$production_constraints[[i]],
     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
-    restoration_only = FALSE,
-    wetlands = TRUE,
+    restoration_only = scenarios$restoration_only[[i]],
+    wetlands = scenarios$wetlands[[i]],
     nuts2_shp = nuts2_shp,
     pu_restoration_budget_data = pu_restoration_budget_data,
     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
-    name = "globiomICflat",
-    solver = "gurobi")
+    name = scenarios$name[[i]],
+    solver = "gurobi",
+    SI = scenarios$SI[[i]] )
 }
 
+set.seed(1234)
+# ## plan and run scenarios
 ## plan and run scenarios
 plan(multicore, workers = 6) # see ?future::plan, for other options
 
@@ -957,8 +1411,250 @@ plan(multicore, workers = 6) # see ?future::plan, for other options
   future_map(iter)
 
 
+# ################## SI: Biodiversity sensitivity #############
+
+rij_biodiv_low <- read_fst("data/formatted-data/features_split.fst") |>
+  rename(species = feature) |>
+  #mutate(amount = round(amount)) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  dplyr::select(pu, species, zone, amount) |>
+  drop_na(pu) |>
+  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+  mutate(amount = replace_na(amount,0)) |>
+  mutate(amount = ifelse(amount == 0.3, 0.1,
+                         ifelse(amount == 0.6, 0.3, amount)))
+
+# pre set up basic problem
+p <- problem(x = pu,
+             features = feat,
+             zones = z,
+             cost_column = cost_columns,
+             rij = rij_biodiv_low) |>
+  add_min_shortfall_objective(nrow(pu))
+
+scenarios <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = c("EVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),
+    future = c("f455"),
+    name = "biodivLOW"
+  )
+
+iter <- function(i) {
+  problem_setup(
+    cores = parallel::detectCores(),
+    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+    pu, # pu data (x from p)
+    targs,
+    manual_bounded_constraints = manual_bounded_constraints,
+    carbon_weight = scenarios$carbon_weight[[i]],
+    restoration_constraint = scenarios$restoration_constraint[[i]],
+    #conservation_constraint = 0.3,
+    production_constraints = scenarios$production_constraints[[i]],
+    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+    restoration_only = scenarios$restoration_only[[i]],
+    wetlands = scenarios$wetlands[[i]],
+    nuts2_shp = nuts2_shp,
+    pu_restoration_budget_data = pu_restoration_budget_data,
+    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+    restoration_scenario = scenarios$restoration_scenario[[i]],
+    future = scenarios$future[[i]],
+    name = scenarios$name[[i]],
+    solver = "gurobi",
+    SI = TRUE)
+}
+
+# ## plan and run scenarios
+## plan and run scenarios
+plan(multicore, workers = 6) # see ?future::plan, for other options
+
+1:nrow(scenarios) %>%
+  future_map(iter)
 #
-# #### Test outcome differences ######
-# sum(test_feas_f455$solution_1_z18)/sum(nuts2_crop_high$value)*10
-# sum(test_feas_f455$solution_1_z13)/sum(nuts2_forest_prod$value)*10
-# sum(test_feas_f455$solution_1_z14)/sum(nuts2_pasture_high$value)*10
+#
+# # ## Sensitivity biodiversity high
+rij_biodiv_high <- read_fst("data/formatted-data/features_split.fst") |>
+  rename(species = feature) |>
+  #mutate(amount = round(amount)) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  dplyr::select(pu, species, zone, amount) |>
+  drop_na(pu) |>
+  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+  mutate(amount = replace_na(amount,0)) |>
+  mutate(amount = ifelse(amount == 0.3, 0.5,
+                         ifelse(amount == 0.6, 0.8, amount)))
+
+p <- problem(x = pu,
+             features = feat,
+             zones = z,
+             cost_column = cost_columns,
+             rij = rij_biodiv_high) |>
+  add_min_shortfall_objective(nrow(pu))
+
+scenarios <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = c("EVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),
+    future = c("f455"),
+    name = "biodivHIGH"
+  )
+
+iter <- function(i) {
+  problem_setup(
+    cores = parallel::detectCores(),
+    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+    pu, # pu data (x from p)
+    targs,
+    manual_bounded_constraints = manual_bounded_constraints,
+    carbon_weight = scenarios$carbon_weight[[i]],
+    restoration_constraint = scenarios$restoration_constraint[[i]],
+    #conservation_constraint = 0.3,
+    production_constraints = scenarios$production_constraints[[i]],
+    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+    restoration_only = scenarios$restoration_only[[i]],
+    wetlands = scenarios$wetlands[[i]],
+    nuts2_shp = nuts2_shp,
+    pu_restoration_budget_data = pu_restoration_budget_data,
+    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+    restoration_scenario = scenarios$restoration_scenario[[i]],
+    future = scenarios$future[[i]],
+    name = scenarios$name[[i]],
+    solver = "gurobi",
+    SI = TRUE)
+}
+
+# ## plan and run scenarios
+## plan and run scenarios
+plan(multicore, workers = 6) # see ?future::plan, for other options
+
+1:nrow(scenarios) %>%
+  future_map(iter)
+
+# ## Sensitivity carbon cropland
+
+rij_carbon_noimpact <- read_fst("data/formatted-data/features_split.fst") |>
+  rename(species = feature) |>
+  #mutate(amount = round(amount)) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  dplyr::select(pu, species, zone, amount) |>
+  drop_na(pu) |>
+  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+  mutate(amount = replace_na(amount,0)) |>
+  mutate(amount = ifelse(zone %in% c(16, 17,18,1,2) & species == 999999,
+                           1, amount))
+p <- problem(x = pu,
+             features = feat,
+             zones = z,
+             cost_column = cost_columns,
+             rij = rij_carbon_noimpact) |>
+  add_min_shortfall_objective(nrow(pu))
+
+scenarios <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = c("EVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),
+    future = c("f455"),
+    name = "carbonSI"
+  )
+
+iter <- function(i) {
+  problem_setup(
+    cores = parallel::detectCores(),
+    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+    pu, # pu data (x from p)
+    targs,
+    manual_bounded_constraints = manual_bounded_constraints,
+    carbon_weight = scenarios$carbon_weight[[i]],
+    restoration_constraint = scenarios$restoration_constraint[[i]],
+    #conservation_constraint = 0.3,
+    production_constraints = scenarios$production_constraints[[i]],
+    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+    restoration_only = scenarios$restoration_only[[i]],
+    wetlands = scenarios$wetlands[[i]],
+    nuts2_shp = nuts2_shp,
+    pu_restoration_budget_data = pu_restoration_budget_data,
+    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+    restoration_scenario = scenarios$restoration_scenario[[i]],
+    future = scenarios$future[[i]],
+    name = scenarios$name[[i]],
+    solver = "gurobi",
+    SI = TRUE)
+}
+
+# ## plan and run scenarios
+## plan and run scenarios
+plan(multicore, workers = 6) # see ?future::plan, for other options
+
+1:nrow(scenarios) %>%
+  future_map(iter)
+#
+# ### baselines
+#
+p <- problem(x = pu,
+             features = feat,
+             zones = z,
+             cost_column = cost_columns,
+             rij = rij) |>
+  add_min_shortfall_objective(nrow(pu))
+
+scenarios <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = c("EVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),
+    future = c("f455"),
+    name = "proportional"
+  )
+
+iter <- function(i) {
+  problem_setup(
+    cores = parallel::detectCores(),
+    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+    pu, # pu data (x from p)
+    targs,
+    manual_bounded_constraints = manual_bounded_constraints,
+    carbon_weight = scenarios$carbon_weight[[i]],
+    restoration_constraint = scenarios$restoration_constraint[[i]],
+    #conservation_constraint = 0.3,
+    production_constraints = scenarios$production_constraints[[i]],
+    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+    restoration_only = scenarios$restoration_only[[i]],
+    wetlands = scenarios$wetlands[[i]],
+    nuts2_shp = nuts2_shp,
+    pu_restoration_budget_data = pu_restoration_budget_data,
+    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+    restoration_scenario = scenarios$restoration_scenario[[i]],
+    future = scenarios$future[[i]],
+    name = scenarios$name[[i]],
+    solver = "gurobi",
+    SI = TRUE)
+}
+
+# ## plan and run scenarios
+## plan and run scenarios
+plan(multicore, workers = 6) # see ?future::plan, for other options
+
+1:nrow(scenarios) %>%
+  future_map(iter)

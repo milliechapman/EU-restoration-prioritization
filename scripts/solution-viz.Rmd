@@ -24,9 +24,14 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
-solution <- read_csv(sol[[3]]) |>
+sol <- "../data-formatted/sol/sol_carbon_0.9_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+
+#sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
+solution <- read_csv(sol) |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
+
+sum(solution$solution_1_z13)
+
 
 ic <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |> rename(pu = PUID)
 
@@ -247,4 +252,115 @@ ic_rs |>
 
 
 
+calculate shortfall
+
+```{r}
+targets <- read_csv("../data/formatted-data/targets_split_formatted.csv")
+pu_in_EU <- read_csv("../data/formatted-data/pu_in_EU.csv")
+raster <- raster("../data/landcover/10km/Corine_2018_cropland.tif")
+
+pu <- read_fst("../data/formatted-data/pu_data.fst") |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu, nuts2id)) |>
+  drop_na(id)
+
+rij <- read_fst("../data/formatted-data/features_split.fst") |>
+  rename(species = feature) |>
+  #mutate(amount = round(amount)) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  dplyr::select(pu, species, zone, amount) |>
+  drop_na(pu) |>
+  mutate(amount = replace_na(amount, 0))
+
+rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
+## Calculate representation and save
+
+filelist_temp <-  "../data-formatted/sol/sol_carbon_0.9_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+
+shortfalls <- list()
+
+#  join targets and spp info
+for (i in 1:length(filelist_temp)) {
+  filenm <- unlist(strsplit(filelist_temp[[i]], "_"))
+  carbon_weight <- filenm[[3]]
+  country_contraint <- filenm[[9]]
+  scenario <- filenm[[15]]
+  future <- str_sub(filenm[[18]], 1,-5)
+
+  solution <- read_csv(filelist_temp[[i]])
+
+  solution <- solution |>
+    rowid_to_column("pu") |>
+    dplyr::select(pu, solution_1_z1:solution_1_z26) |>
+    pivot_longer(-pu) |>
+    mutate(zone = str_sub(name, 13)) |>
+    dplyr::select(-name) |>
+    mutate(zone = as.numeric(zone))
+
+  rij_sol <- rij |>
+    left_join(solution, by = c("pu", "zone"))
+
+  contribution <- rij_sol |>
+    mutate(contribution = amount*value) |>
+    group_by(species) |>
+    summarise(rep = sum(contribution))|>
+    left_join(targets) |>
+    mutate(shortfall = rep-target) |>
+    mutate(shortfall_perc = shortfall/target) |>
+    mutate(carbon_weight = carbon_weight,
+           scenario = scenario,
+           country_contraint = country_contraint,
+           future = future) |>
+    mutate(target_met = ifelse(shortfall<0,"no", "yes")) |>
+    mutate(spp = ifelse(species != 999999, "biodiv", "carbon"))
+
+  shortfalls[[i]] <- contribution
+}
+
+shortfalls <- bind_rows(shortfalls, .id = "column_label")
+
+#write_csv(shortfalls, "data/solutions/representation_REF_f455_scenarios_proportional.csv")
+
+
+zones <- read_csv("../data/formatted-data/zone_id.csv") |>
+  filter(id >11) |>
+  separate(zone, sep = "_", into = c("A", "B", "C")) |>
+  mutate(zone = paste0(A, "_", B)) |>
+  dplyr::select(-c(A,B,C))
+
+
+LC <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |>
+  dplyr::select(-Status) |>
+  pivot_longer(-PUID) |> rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu, nuts2id)) |>
+  drop_na(id) |> rename(zone = name) |>
+  rename(pu = id) |>
+  left_join(zones) |>
+  dplyr::select(-zone) |>
+  rename(zone = id)
+
+
+rij_sol <- rij |> 
+  left_join(LC, by = c("pu", "zone"))
+
+
+contribution <- rij_sol |>
+  mutate(contribution = amount*value) |>
+  group_by(species) |>
+  summarise(rep = sum(contribution, na.rm = TRUE))|>
+  left_join(targets) |>
+  mutate(shortfall = rep-target) |>
+  mutate(shortfall_perc = shortfall/target) |>
+  mutate(carbon_weight = "IC",
+         scenario = "IC",
+         country_contraint = "IC") |>
+  mutate(target_met = ifelse(shortfall<0,"no", "yes")) |>
+  mutate(spp = ifelse(species != 999999, "biodiv", "carbon"))
+
+write_csv(contribution, "data/solutions/representation_IC.csv")
+```
 

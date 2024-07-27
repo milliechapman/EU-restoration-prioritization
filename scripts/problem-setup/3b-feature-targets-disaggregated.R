@@ -92,7 +92,6 @@ carbon <-
   read_fst("data/formatted-data/features_data_all.fst") |>
   filter(feature == 999999)
 
-hist(carbon$amount)
 features_split_spp |> bind_rows(carbon) |>
   write_fst("data/formatted-data/features_split.fst", compress = 75)
 
@@ -112,17 +111,15 @@ features_split_spp_targets <- read_fst("data/formatted-data/features_data_spp_fo
 
 features_split_spp_targets
 
-
 lc_targets <- PU_lc |>
   left_join(zone_id) |> dplyr::select(-MAES) |>
-  mutate(zone = as.integer(zone))
+  mutate(zone = as.integer(zone)) |>
+  mutate(area = replace_na(area,0))
 
-hist(lc_targets$area)
+ggplot(lc_targets) + geom_histogram(aes(x = area))
 
 targets_split_spp <- features_split_spp_targets |>
   left_join(lc_targets)
-
-hist(targets_split_spp$area)
 
 targets_split <- targets_split_spp |>
   mutate(spp = round(feature, -4)) |>
@@ -141,7 +138,8 @@ targets_split <- targets_split_spp |>
   mutate(target = target*perc_target) |>
   dplyr::select(target, feature)
 
-hist(targets_split$target)
+ggplot(targets_split) + geom_histogram(aes(x = target))
+
 # ZONES
 z <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id)) |>
@@ -168,8 +166,6 @@ targets_split |>
 
 ## formatted targets
 ##
-
-
 pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
 pu <- read_fst("data/formatted-data/pu_data.fst") |>
@@ -177,7 +173,6 @@ pu <- read_fst("data/formatted-data/pu_data.fst") |>
   rename(id = EU_id) |>
   dplyr::select(-c(pu, nuts2id)) |>
   drop_na(id)
-
 
 rij <- read_fst("data/formatted-data/features_split.fst") |>
   rename(species = feature) |>
@@ -228,7 +223,6 @@ names <- readRDS("data/SpeciesData/SDMNameMatching.rds") |>
   dplyr::select(id, speciesname)
 
 names$speciesname <- sub(" ", "_", names$speciesname)
-
 
 targs_existing <- read_csv("data/formatted-data/targets_split.csv") |>
   mutate(zone = list(z$name)) |>

@@ -1,0 +1,60 @@
+---
+title: "Initial conditions issue"
+format: pdf
+editor: visual
+---
+
+```{r message=FALSE, warning=FALSE}
+library(terra)
+library(raster)
+```
+
+# Most recent version 
+
+This is the most updated version of the IC I was given to use in August:
+
+```{r message=FALSE, warning=FALSE}
+globiom_lc <- rast(
+  "../data/initial_lc_globiom/Protection_augmented_ETL2_shares_August_2023.tif")
+```
+
+You can see that the marine layers are not where we'd expect...
+
+```{r fig.width=6, fig.height=6}
+plot(globiom_lc['Marine'])
+```
+
+```{r message=FALSE, warning=FALSE, fig.width=4, fig.height=4}
+plot(sum(globiom_lc['Marine']), main = "Marine (sum)")
+```
+
+And look super similar to the rivers & lakes? 
+
+```{r message=FALSE, warning=FALSE, fig.width=4, fig.height=4}
+plot(sum(globiom_lc['Rivers']), main = "Rivers & Lakes (sum)")
+```
+
+# Previous version
+
+Previous version I was using didn't have the issue -- 
+
+```{r message=FALSE, warning=FALSE}
+globiom_lc_old <- rast(
+  "../data/initial_lc_globiom/5arcmin_augmented_ETL2_wprotection_shares 2.tif")
+```
+
+Marine was where we would expect
+```{r message=FALSE, warning=FALSE, fig.width=6, fig.height=6}
+plot(globiom_lc_old['Marine'])
+```
+
+```{r message=FALSE, warning=FALSE, fig.width=4, fig.height=4}
+plot(sum(globiom_lc_old['Marine']),main = "Marine (sum - old version)")
+```
+
+As were the rivers and lakes
+
+```{r message=FALSE, warning=FALSE, fig.width=4, fig.height=4}
+plot(sum(globiom_lc_old['Rivers']), main = "Rivers & Lakes (sum - old version)")
+```
+

@@ -9,7 +9,7 @@ library(MetBrewer)
 library(ggridges)
 library(rasterVis)
 #devtools::install_github("yutannihilation/ggsflabel")
-library(ggsflabel)
+#library(ggsflabel)
 library(RStoolbox)
 library(scico)
 library(geomtextpath)
@@ -18,7 +18,7 @@ library(ggpattern)
 library(viridis)
 library(ggsci)
 library(formattable)
-rm(list = ls())
+#rm(list = ls())
 
 ######################### set up files ##############
 zone_id <- read_csv("data/formatted-data/zone_id.csv")
@@ -37,7 +37,7 @@ BR_lookup <- read_csv("data/plotting/bioregion_code.csv") |>
   rename(bioregion = BRIDnum) |>
   dplyr::select(code, bioregion)
 country_lookup <- read_csv("data/plotting/country_code.csv")
-plotting_data <- read_csv("data/plotting/plotting_data_ref_f455.csv")
+# plotting_data <- read_csv("data/plotting/plotting_data_ref_f455.csv")
 
 PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   rasterToPolygons() |>
@@ -73,9 +73,7 @@ PU_template_EU <- pu_in_EU |>
 colors <- c("grey", met.brewer(name="Isfahan1",type="continuous"))
 
 rep_IC <- read_csv("data/solutions/representation_IC.csv")
-rep <- read_csv("data/solutions/representation_REF_f455_scenarios_version3.csv")
-
-rep |> filter(species == 999999)
+rep <- read_csv("data/solutions/representation_REF_f455_scenarios_proportional.csv")
 
 rep_IC_formatted <- rep_IC |>
   dplyr::select(-c(rep, target, shortfall)) |>
@@ -162,7 +160,7 @@ rep |>
   group_by(scenario, carbon_weight, country_contraint, taxon_id, future) |>
   summarise(change = sum(change)) |>
   pivot_wider(names_from = country_contraint, values_from = change) |>
-  mutate(diff = ifelse((`EVEN` - `UNCONSTRAINED`)<0,1,0),
+  mutate(diff = ifelse((`EVEN` - `UNEVEN`)<0,1,0),
          n_spp = length(unique(taxon_id))) |>
   group_by(scenario, carbon_weight, future) |>
   summarise(diff_spp = sum(diff, na.rm = TRUE)/mean(n_spp,  na.rm = TRUE)) |>
@@ -174,7 +172,7 @@ rep |>
   dplyr::select(scenario, carbon_weight, country_contraint, future, species, rep) |>
   pivot_wider(names_from = country_contraint, values_from = rep) |>
   left_join(ic_join) |>
-  mutate(diff = (`EVEN` - `UNCONSTRAINED`)/rep_ic*-100) |>
+  mutate(diff = (`EVEN` - `UNEVEN`)/rep_ic*-100) |>
   arrange(diff)
 
 
@@ -183,6 +181,7 @@ rep |>
 write_csv(b_status |> filter(carbon_weight>0), "data/biodiv_results.csv")
 write_csv(c_perc |> filter(carbon_weight>0), "data/carbon_results.csv")
 
+b_status |> filter(carbon_weight == 0.5)
 a <- b_status |> filter(carbon_weight>0) |>
   ggplot(aes(x = carbon_weight, y = improved*100,
                             col = country_contraint)) +
@@ -274,7 +273,7 @@ ggsave(filename = 'figures/updated/pareto-all.png', plot = pareto_all_plot, widt
 
 
 ################### figure 1 - conceptual ##########################
-solution <- read_csv("data-formatted/sol/sol_carbon_0.1_restoration_0.141_production_TRUE_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_globiomICflat_gurobi_f455.csv") |>
+solution <- read_csv("data-formatted/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv") |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 colnames(solution) <- c("id", (zone_id$zone))
 
@@ -374,7 +373,7 @@ write_csv(rest_table, "data/rest_table_results.csv")
 ########## pareto
 pareto_burden <- rep |> filter(target >0) |>
   mutate(shortfall_perc = ifelse(shortfall_perc >0,0, shortfall_perc)) |>
-  drop_na(shortfall_perc) |>
+  #drop_na(shortfall_perc) |>
   #filter(country_contraint == TRUE)|>
   mutate(type = ifelse(species == 99999, "carbon", "biodiversity")) |>
   group_by(carbon_weight, spp, scenario, country_contraint) |>
