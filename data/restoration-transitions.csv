@@ -1,0 +1,16 @@
+﻿name,WoodlandForest_primary,WoodlandForest_multi,WoodlandForest_prod,HeathlandShrub_natural,Grassland_natural,SparseVeg_natural,Cropland_low,Cropland_med,Cropland_high,Urban_urban,Wetlands_natural,RiversLakes_natural,MarineTransitional_natural,Pasture_low,Pasture_high
+WoodlandForest_primary,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+WoodlandForest_multi,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+WoodlandForest_prod,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0
+HeathlandShrub_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+Grassland_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+SparseVeg_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+Cropland_low,0,0,0,1,1,1,0,0,0,0,1,0,1,0,0
+Cropland_med,0,0,0,1,1,1,1,0,0,0,1,0,1,0,0
+Cropland_high,0,0,0,1,1,1,1,1,0,0,1,0,1,0,0
+Urban_urban,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+Wetlands_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+RiversLakes_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+MarineTransitional_natural,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+Pasture_low,0,0,0,1,1,1,1,1,0,0,1,0,1,0,0
+Pasture_high,0,0,0,1,1,1,1,1,0,0,1,0,1,1,0

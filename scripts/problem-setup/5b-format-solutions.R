@@ -74,7 +74,8 @@ for (i in 1:length(filelist_temp)) {
 
 shortfalls <- bind_rows(shortfalls, .id = "column_label")
 
-write_csv(shortfalls, "data/solutions/representation_REF_f455_scenarios_proportional.csv")
+
+write_fst(shortfalls, "data/solutions/representation_REF_f455_scenarios_proportional.fst", compress = 80)
 
 
 zones <- read_csv("data/formatted-data/zone_id.csv") |>

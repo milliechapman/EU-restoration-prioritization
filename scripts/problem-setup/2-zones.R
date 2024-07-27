@@ -44,8 +44,8 @@ crop_mid_perc <- crop_mid/crop_total
 crop_low_perc <- crop_low/crop_total
 
 # same w/ pasture intensity
-pasture_high <- rast("data/IntensityLayersPastureCrop/PastureCLC_HighintensityEPIC_ver2.tif")#rast("data/ManagementIntensity/10000/PastureCLC_HighintensityEPIC.tif")
-pasture_low <- rast("data/IntensityLayersPastureCrop/PastureCLC_LowintensityEPIC_ver2.tif") #rast("data/ManagementIntensity/10000/PastureCLC_LowintensityEPIC.tif")
+pasture_high <- rast("data/IntensityLayersPastureCrop/PastureCLC_HighintensityEPIC_ver2.tif")
+pasture_low <- rast("data/IntensityLayersPastureCrop/PastureCLC_LowintensityEPIC_ver2.tif")
 
 nuts2_pasture <- nuts2 |>
   mutate(pasture_high = exactextractr::exact_extract(pasture_high, nuts2, 'sum'),

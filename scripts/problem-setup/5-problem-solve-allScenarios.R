@@ -1113,7 +1113,7 @@ problem_setup <- function(
 
   if(SI == FALSE){
     # save!
-    write_csv(s, paste0("data-formatted/sol/NUTSadj/sol_carbon_",
+    write_csv(s, paste0("data/solutions/sol/NUTSadj/sol_carbon_",
                         carbon_weight,
                         "_restoration_", restoration_constraint,
                         "_production_", production_constraints,
@@ -1128,7 +1128,7 @@ problem_setup <- function(
   }
   if(SI == TRUE){
   # save!
-  write_csv(s, paste0("data-formatted/sol/SI-sol/sol_carbon_",
+  write_csv(s, paste0("data/solutions/sol/SI-sol/sol_carbon_",
                       carbon_weight,
                       "_restoration_", restoration_constraint,
                       "_production_", production_constraints,
@@ -1144,9 +1144,9 @@ problem_setup <- function(
 }
 
 ######### load in and some minor formatting of data ################
-pu_in_EU <- read_csv("data-formatted/pu_in_EU.csv")
+pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
 
-pu <- read_fst("data-formatted/pu_data.fst") |>
+pu <- read_fst("data/formatted-data/pu_data.fst") |>
   left_join(pu_in_EU) |>
   rename(id = EU_id) |>
   dplyr::select(-c(pu, nuts2id)) |>
@@ -1162,7 +1162,6 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
   drop_na(pu) |>
   mutate(amount = ifelse(amount<0.001, 0, amount)) |>
   mutate(amount = replace_na(amount,0))
-
 
 # COST COLUMNS: names of cost cols from pu_data
 cost_columns <- colnames(pu)[1:(ncol(pu)-1)]
@@ -1185,13 +1184,13 @@ feat <-feat_rij |>
   drop_na(name)
 
 # ZONES
-z <- read_csv("data-formatted/zone_id.csv") |>
+z <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id)) |>
   relocate(id, 1) |>
   dplyr::select(-zone)
 
 # add production constraints
-nuts2_shp <- st_read("data-formatted/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
+nuts2_shp <- st_read("data/formatted-data/EU_GLOBIOM_NUTS2.shp") |>
   mutate(country = substr(NUTS2, start = 1, stop = 2)) |>
   filter(country != "UK")
 nuts2_all <- nuts2_shp |>
@@ -1203,11 +1202,11 @@ nuts2_names <- nuts2_all$NUTS_ID
 # BOUNDED CONSTRAINTS
 # # zone ids for this..
 
-zones <- read_csv("data-formatted/zone_id.csv") |>
+zones <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id))
 
 # FEATURE TARGETS
-names <- readRDS("data-formatted/SDMNameMatching.rds") |>
+names <- readRDS("data/formatted-data/SDMNameMatching.rds") |>
   mutate(speciesname= current_sname) |>
   rename(id = taxon_id)|>
   dplyr::select(id, speciesname)
@@ -1375,7 +1374,7 @@ scenarios_only_rest <-
     SI = TRUE
   )
 
-scenarios <- scenarios |> bind_rows(scenarios_only_rest)
+scenarios <- scenarios[1,] #|> bind_rows(scenarios_only_rest)
 #
 # # # functionalize the for-loop contents
 iter <- function(i) {
