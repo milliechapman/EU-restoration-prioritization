@@ -1374,11 +1374,11 @@ scenarios <-
     SI = FALSE
   )
 
-scenarios_only_rest <-
+scenarios_no_rest <-
   tidyr::crossing(# Do all combinations of:
     carbon_weight = 0.5,#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
     country_constraints = "FLEX",
-    restoration_constraint =  0,
+    restoration_constraint =  0.02,
     wetlands = TRUE,
     restoration_only = FALSE,
     production_constraints = "NUTS2adj",
@@ -1388,7 +1388,7 @@ scenarios_only_rest <-
     SI = TRUE
   )
 
-scenarios <- scenarios |> bind_rows(scenarios_only_rest)
+scenarios <- scenarios |> bind_rows(scenarios_no_rest)
 
 # # # functionalize the for-loop contents
 iter <- function(i) {
@@ -1411,7 +1411,7 @@ iter <- function(i) {
     restoration_scenario = scenarios$restoration_scenario[[i]],
     future = scenarios$future[[i]],
     name = scenarios$name[[i]],
-    solver = "gurobi",
+    solver = "highs",
     SI = scenarios$SI[[i]] )
 }
 

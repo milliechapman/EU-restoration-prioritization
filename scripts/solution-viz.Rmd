@@ -24,7 +24,7 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- "../data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.01_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_norest_highs_f455.csv"
+sol <- "../data/solutions/sol/NUTSadj/sol_carbon_0.9_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_f455.csv"
 
 #sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
 solution <- read_csv(sol) |>
@@ -94,8 +94,9 @@ Quick bar plot of zones
 
 ```{r width = 10}
 as_tibble(solution_table_plot) |>
+  mutate(area = sum(value)) |>
   group_by(action) |>
-  summarise(area = sum(value)/41046)
+  summarise(area = sum(value))
 
 bar_plot <- as_tibble(solution_table_plot) |>
   group_by(zone, maes_label, intensity, action) |>
@@ -184,7 +185,9 @@ p2 <- levelplot(conserve, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=li
 p3 <- levelplot(produce, par.settings = myTheme,xlab=NULL, ylab=NULL, scales=list(draw=FALSE))
 
 solu_sum <- app(solution_raster, 'sum')
-plot(solu_sum)
+sum(solu_sum)
+hist(solu_sum, breaks = 1000)
+
 ```
 
 ```{r restzones, fig.width=10, fig.height = 5, dpi = 400}
@@ -260,6 +263,7 @@ targets <- read_csv("../data/formatted-data/targets_split_formatted.csv")
 pu_in_EU <- read_csv("../data/formatted-data/pu_in_EU.csv")
 raster <- raster("../data/landcover/10km/Corine_2018_cropland.tif")
 
+library(fst)
 pu <- read_fst("../data/formatted-data/pu_data.fst") |>
   left_join(pu_in_EU) |>
   rename(id = EU_id) |>
@@ -278,7 +282,7 @@ rij <- read_fst("../data/formatted-data/features_split.fst") |>
 rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
 ## Calculate representation and save
 
-filelist_temp <-  "../data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.01_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_norest_highs_f455.csv"
+filelist_temp <-  "../data/solutions/sol/NUTSadj/sol_carbon_2.5_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
 
 shortfalls <- list()
 

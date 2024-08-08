@@ -20,6 +20,7 @@ MAES <- readRDS("data/EEA_habitatpreferences.rds") |>
                              `Marine inlets and transitional waters` = "MarineTransitional"))
 ## fix naming of species to match above
 MAES$speciesname <- gsub(" ", "_", MAES$speciesname, fixed=TRUE)
+RL_spp <- MAES |> filter(maes_label == "RiversLakes")
 
 ################3 threats data
 ################
