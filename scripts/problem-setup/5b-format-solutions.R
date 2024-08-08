@@ -25,13 +25,16 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
   drop_na(pu) |>
   mutate(amount = replace_na(amount, 0))
 
-rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
 ## Calculate representation and save
 
-filelist_temp <- list.files("data-formatted/sol/NUTSadj",
+filelist_temp <- list.files("data/solutions/sol/NUTSadj/",
                             pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"),
                             full.names = T)
 shortfalls <- list()
+
+# to subtract out the areas that don't have IC data
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
 
 #  join targets and spp info
 for (i in 1:length(filelist_temp)) {
@@ -49,7 +52,10 @@ for (i in 1:length(filelist_temp)) {
     pivot_longer(-pu) |>
     mutate(zone = str_sub(name, 13)) |>
     dplyr::select(-name) |>
-    mutate(zone = as.numeric(zone))
+    mutate(zone = as.numeric(zone)) |>
+    left_join(pu_adjustment |> rename(pu = id)) |>
+    mutate(value = ifelse(zone == 23, value-diff, value)) |>
+    dplyr::select(-diff)
 
   rij_sol <- rij |>
     left_join(solution, by = c("pu", "zone"))
@@ -96,9 +102,6 @@ LC <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv") |>
   left_join(zones) |>
   dplyr::select(-zone) |>
   rename(zone = id)
-
-rij |> filter(zone >15 & species != "999999")
-
 
 rij_sol <- rij |>
   left_join(LC, by = c("pu", "zone"))
@@ -160,7 +163,7 @@ bioregion <-read_csv("data/formatted-data/pu_in_EU_BR.csv") |>
   dplyr::select(pu, BR_ID) |>
   rename(id = pu)
 
-country <- read_csv("data/formatted-data/linear_constraints/pu_crop_high_budget_data_55.csv") |>
+country <- read_csv("data/formatted-data/linear_constraints/pu_crop_high_budget_data.csv") |>
   dplyr::select(NUTS_ID, pu) |>
   mutate(country = substr(NUTS_ID, start = 1, stop = 2))|>
   rename(id = pu) |> dplyr::select(-NUTS_ID)
@@ -171,15 +174,16 @@ PU_template_EU <- pu_in_EU |>
   dplyr::select(-id) |>
   rename(id = EU_id)
 
-filelist_temp <- list.files("data-formatted/sol/",
-                            pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"),
+filelist_temp <- list.files("data/solutions/sol/NUTSadj/",
+                            pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"),
                             full.names = T)
-filelist_nm <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"))
+filelist_nm <- list.files("data/solutions/sol/NUTSadj/",
+                          pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"))
 solution_scenarios <- list()
 zones <- read_csv("data/formatted-data/zone_id.csv") |>
   mutate(name = paste0("z", id))
+i=1
 #  join targets and spp info
-#
 for (i in 1:length(filelist_temp)) {
   name <- substr(filelist_nm[[i]],1,nchar(filelist_nm[[i]])-4)
   solution <- read_csv(filelist_temp[[i]]) |>
@@ -251,8 +255,11 @@ write_csv(MAES, "data/plotting/spp_lookup.csv")
 # Read  in solutions
 
 plot_table <- list()
-filelist_temp <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"), full.names = T)
-filelist_nm <- list.files("data-formatted/sol/", pattern = c("*globiomICflat_gurobi_f455.csv|*globiomICflat_gurobi_ref.csv"))
+filelist_temp <- list.files("data/solutions/sol/NUTSadj/", pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"), full.names = T)
+filelist_nm <- list.files("data/solutions/sol/NUTSadj/", pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"))
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
+
 for(i in 1:length(filelist_temp)){
   nm <- filelist_nm[i] #"sol_carbon_0.1_restoration_0.2_production_TRUE_country_TRUE_bioregion_TRUE_wetlands_TRUE_onlyrestoration_FALSE_TRIAL"
   carbon <- str_split(nm, "_")[[1]][3]
@@ -271,7 +278,10 @@ for(i in 1:length(filelist_temp)){
     dplyr::select(-id) |>
     rename(id = EU_id) |>
     left_join(solution) |>
-    pivot_longer(-c(nuts2id:id))
+    pivot_longer(-c(nuts2id:id))|>
+    left_join(pu_adjustment) |>
+    mutate(value = ifelse(name == "RiversLakes_natural_conserve", value-diff, value))
+
 
   solution_table_plot <- solution_table |>
     mutate(zone = name) |>
@@ -285,5 +295,87 @@ for(i in 1:length(filelist_temp)){
 }
 
 plotting_data <- bind_rows(plot_table)
-write_csv(plotting_data, "data/plotting/plotting_data_ref_f455.csv")
+write_fst(plotting_data, "data/plotting/plotting_data_ref_f455.fst")
 
+## IC plotting data
+
+nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
+  rename(NUTS_ID = NURGCDL2) |>
+  mutate(nuts2id = seq(1:260)) |>
+  mutate(country = str_sub(NUTS_ID,1,2)) |>
+  filter(country != "UK") |>
+  dplyr::select(nuts2id, NUTS_ID)
+
+plotting_data_ic <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv") |>
+  dplyr::select(-Status) |>
+  pivot_longer(-PUID) |> rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu)) |>
+  drop_na(id) |> rename(zone = name) |>
+  separate(zone, c('maes_label', 'intensity'), sep = "_") |>
+  left_join(as_tibble(nuts2) |> dplyr::select(-geometry))
+
+write_fst(plotting_data_ic, "data/plotting/plotting_data_ic.fst")
+
+##### land use change figure
+plotting_data_ic <- read_fst("data/plotting/plotting_data_ic.fst")
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
+
+filelist_temp <- "data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+nm <- "sol_carbon_2.5_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+carbon <- str_split(nm, "_")[[1]][3]
+country_TF <- str_split(nm, "_")[[1]][9]
+scenario <- str_split(nm, "_")[[1]][15]
+future <- str_split(nm, "_")[[1]][18]
+
+solution <- read_csv(filelist_temp[[i]]) |>
+  dplyr::select(id, solution_1_z1:solution_1_z26)
+colnames(solution) <- c("id", (zone_id$zone))
+
+solution_table <- pu_in_EU |>
+  rename(id = pu) |> #plot_data |>
+  #left_join(PU_template) |>
+  #left_join(bioregion) |>
+  dplyr::select(-id) |>
+  rename(id = EU_id) |>
+  left_join(solution) |>
+  pivot_longer(-c(nuts2id:id)) |>
+  left_join(pu_adjustment) |>
+  mutate(value = ifelse(name == "RiversLakes_natural_conserve", value-diff, value))
+
+solution_table_plot <- solution_table |>
+  mutate(zone = name) |>
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
+  mutate(carbon = carbon,
+         country_TF = country_TF,
+         scenario = scenario,
+         future = future)
+
+LC_change_fig_sol <- solution_table_plot |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(nuts2id, intensity) |> summarise(value_sol = sum(value,na.rm = T))
+
+
+plotting_data_ic |> filter(maes_label == "RiversLakes")
+solution_table |> filter(name == "RiversLakes_natural_conserve")
+
+LC_change_fig_ic <- plotting_data_ic |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(nuts2id, intensity) |> summarise(value_ic = sum(value,na.rm = T))
+
+LC_change_fig <- LC_change_fig_sol |> full_join(LC_change_fig_ic) |>
+  mutate(delta = value_sol-value_ic)
+
+LC_change_fig |> left_join(nuts2) |>
+  #filter(intensity == "high")|>
+  ggplot() + geom_sf(aes(fill = delta, geometry = geometry)) +
+  facet_wrap(~intensity, nrow = 1) + theme_minimal() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0)

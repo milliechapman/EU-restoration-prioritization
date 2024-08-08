@@ -24,7 +24,7 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- "../data-formatted/sol/sol_carbon_0.9_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+sol <- "../data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.01_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_norest_highs_f455.csv"
 
 #sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
 solution <- read_csv(sol) |>
@@ -35,7 +35,8 @@ sum(solution$solution_1_z13)
 
 ic <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |> rename(pu = PUID)
 
-pu_in_EU <- read_csv("../data-formatted/pu_in_EU.csv") 
+
+pu_in_EU <- read_csv("../data/formatted-data/pu_in_EU.csv") 
 
 ic <- ic |>
   left_join(pu_in_EU) |>
@@ -43,7 +44,7 @@ ic <- ic |>
   dplyr::select(-c(pu, nuts2id)) |>
   drop_na(id)
 
-zone_id <- read_csv("../data-formatted/zone_id.csv") 
+zone_id <- read_csv("../data/formatted-data/zone_id.csv") 
 zone_id$zone
 colnames(solution) <- c("id", (zone_id$zone))
 ```
@@ -51,7 +52,7 @@ colnames(solution) <- c("id", (zone_id$zone))
 
 
 ```{r include = FALSE, cache = TRUE}
-MAES <- readRDS("../data-formatted/EEA_habitatpreferences.rds") |>
+MAES <- readRDS("../data/EEA_habitatpreferences.rds") |>
   filter(typeasso %in% c("Preferred", "Suitable")) |>
   mutate(maes_label = recode(maes_label, 
                              `Sparserly vegetated land` = "SparseVeg",
@@ -60,14 +61,14 @@ MAES <- readRDS("../data-formatted/EEA_habitatpreferences.rds") |>
                              `Woodland and forest` = "WoodlandForest",
                              `Rivers and lakes` = "RiversLakes",
                              `Marine inlets and transitional waters` = "MarineTransitional"))
-## fix naming of species to match above
+## fix naming of ../data/SpeciesData/BirdsDirectiveSpeciesThreats.csv## fix naming of species to match above
 MAES$speciesname <- gsub(" ", "_", MAES$speciesname, fixed=TRUE)
 
-PU_plot <- raster("../data-formatted/PU_raster.tif")
+PU_plot <- raster("../data/formatted-data/PU_raster.tif")
 PU_template <- rasterToPolygons(PU_plot) |>
   st_as_sf() |>
   rename(id = PU_raster)
-pu_in_EU <- read_csv("../data-formatted/pu_in_EU.csv")
+pu_in_EU <- read_csv("../data/formatted-data/pu_in_EU.csv")
 
 colors <- c("grey", met.brewer(name="Isfahan1",type="continuous"))
 ```
@@ -277,7 +278,7 @@ rij <- read_fst("../data/formatted-data/features_split.fst") |>
 rij |> filter(species == 999999) |> ggplot(aes(x = amount)) + geom_histogram() + facet_wrap(~zone)
 ## Calculate representation and save
 
-filelist_temp <-  "../data-formatted/sol/sol_carbon_0.9_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_ref.csv"
+filelist_temp <-  "../data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.01_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_norest_highs_f455.csv"
 
 shortfalls <- list()
 
@@ -320,47 +321,202 @@ for (i in 1:length(filelist_temp)) {
 }
 
 shortfalls <- bind_rows(shortfalls, .id = "column_label")
+rep_IC <- read_csv("../data/solutions/representation_IC.csv")
+rep <- shortfalls
 
-#write_csv(shortfalls, "data/solutions/representation_REF_f455_scenarios_proportional.csv")
-
-
-zones <- read_csv("../data/formatted-data/zone_id.csv") |>
-  filter(id >11) |>
-  separate(zone, sep = "_", into = c("A", "B", "C")) |>
-  mutate(zone = paste0(A, "_", B)) |>
-  dplyr::select(-c(A,B,C))
+```
 
 
-LC <- read_csv("../data/outputs/2-zones/PU_lc_intensity.csv") |>
-  dplyr::select(-Status) |>
-  pivot_longer(-PUID) |> rename(pu = PUID) |>
-  left_join(pu_in_EU) |>
-  rename(id = EU_id) |>
-  dplyr::select(-c(pu, nuts2id)) |>
-  drop_na(id) |> rename(zone = name) |>
-  rename(pu = id) |>
-  left_join(zones) |>
-  dplyr::select(-zone) |>
-  rename(zone = id)
+```{r}
+######################### set up files ##############
+zone_id <- read_csv("../data/formatted-data/zone_id.csv")
+spp_lookup_count <- read_csv("../data/plotting/spp_lookup.csv") |>
+  filter(typeasso %in% c("Preferred", "Suitable"))|>
+  group_by(speciesname) |> count() |>
+  ungroup() |>
+  mutate(n = ifelse(n>0,1,0))
+
+spp_lookup <- read_csv("../data/plotting/spp_lookup.csv") |>
+  dplyr::select(speciesname, speciesgroup, taxon_id) |>
+  left_join(spp_lookup_count) |> unique() #|>
+  #pivot_wider(names_from = maes_label, values_from = n)
+
+BR_lookup <- read_csv("../data/plotting/bioregion_code.csv") |>
+  rename(bioregion = BRIDnum) |>
+  dplyr::select(code, bioregion)
+country_lookup <- read_csv("../data/plotting/country_code.csv")
+# plotting_data <- read_csv("data/plotting/plotting_data_ref_f455.csv")
+
+PU_template <- raster("../data/landcover/10km/Corine_2018_cropland.tif") |>
+  rasterToPolygons() |>
+  st_as_sf() |>
+  #st_transform(crs = st_crs(natura)) |>
+  dplyr::mutate(id = seq(1:length(geometry))) |>
+  dplyr::select(-Corine_2018_cropland)
+raster <- raster("../data/landcover/10km/Corine_2018_cropland.tif")
+
+pu_in_EU <- read_csv("../data/formatted-data/pu_in_EU.csv")
+
+PU_plot <- pu_in_EU |> rename(id = pu) |> #plot_data |>
+  left_join(PU_template) |>
+  dplyr::select(EU_id, geometry) |> st_as_sf()
+
+PU_plot <- fasterize(st_as_sf(PU_plot), raster, field = "EU_id")
+
+bioregion <-read_csv("../data/formatted-data/pu_in_EU_BR.csv") |>
+  dplyr::select(pu, BR_ID) |>
+  rename(id = pu)
+
+country <- read_csv("../data/formatted-data/linear_constraints/pu_pasture_low_budget_data.csv") |>
+  dplyr::select(NUTS_ID, pu) |>
+  mutate(country = substr(NUTS_ID, start = 1, stop = 2))|>
+  rename(id = pu) |> dplyr::select(-NUTS_ID)
+
+PU_template_EU <- pu_in_EU |>
+  rename(id = pu) |> #plot_data |>
+  left_join(PU_template) |>
+  dplyr::select(-id) |>
+  rename(id = EU_id)
+
+colors <- c("grey", met.brewer(name="Isfahan1",type="continuous"))
+
+rep_IC <- read_csv("../data/solutions/representation_IC.csv")
+
+rep_IC_formatted <- rep_IC |>
+  dplyr::select(-c(rep, target, shortfall)) |>
+  filter(species != 999999) |>
+  mutate(taxon_id = ifelse(species > 10000000000,
+                           substr(species, start = 1, stop = 7),
+                           substr(species, start = 1, stop = 6)),
+         bioregion = ifelse(species > 10000000000,
+                            substr(species, start = 8, stop = 9),
+                            substr(species, start = 7, stop = 8)),
+         country_code = ifelse(species > 10000000000,
+                               substr(species, start = 10, stop = 11),
+                               substr(species, start = 9, stop = 10))) |>
+  mutate(taxon_id = as.numeric(taxon_id),
+         bioregion = as.numeric(bioregion),
+         country_code = as.numeric(country_code)) |>
+  left_join(BR_lookup, multiple = "all") |>
+  left_join(spp_lookup, multiple = "all")
+
+rep_formatted <- rep |>
+  dplyr::select(-c(column_label, rep, target, shortfall)) |>
+  filter(species != 999999) |>
+  mutate(taxon_id = ifelse(species > 10000000000,
+                           substr(species, start = 1, stop = 7),
+                           substr(species, start = 1, stop = 6)),
+         bioregion = ifelse(species > 10000000000,
+                            substr(species, start = 8, stop = 9),
+                            substr(species, start = 7, stop = 8)),
+         country_code = ifelse(species > 10000000000,
+                               substr(species, start = 10, stop = 11),
+                               substr(species, start = 9, stop = 10))) |>
+  mutate(taxon_id = as.numeric(taxon_id),
+         bioregion = as.numeric(bioregion),
+         country_code = as.numeric(country_code)) |>
+  left_join(BR_lookup, multiple = "all") |>
+  left_join(spp_lookup, multiple = "all")
+```
+
+```{r}
+##################### abstract statistics ##############################
+ic_join <- rep_IC |>
+  rename(rep_ic = rep,
+         shortfall_ic = shortfall,
+         shortfall_perc_ic = shortfall_perc) |>
+  dplyr::select(species, rep_ic, shortfall_ic, shortfall_perc_ic)
+
+## carbon percentage change
+c_perc <- rep |>
+  left_join(ic_join) |>
+  filter(spp == "carbon") |>
+  filter(rep_ic > 0) |>
+  mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(rep_diff = rep_diff*100) |>
+  arrange(-rep_diff)
+
+## conservation status
+b_status <- rep |>
+  left_join(ic_join) |>
+  filter(species != 999999) |>
+  mutate(target_met_ic = ifelse(shortfall_perc_ic < 0, 0, 1),
+         target_met = ifelse(shortfall_perc < 0, 0, 1)) |>
+  filter(target_met_ic<1) |>
+  mutate(improved = (target_met-target_met_ic)) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(improved = sum(improved)/length(unique(species))) |>
+  arrange(-improved)
+```
 
 
-rij_sol <- rij |> 
-  left_join(LC, by = c("pu", "zone"))
+```{r}
+rep_IC_formatted <- rep_IC |>
+  dplyr::select(-c(rep, target, shortfall)) |>
+  filter(species != 999999) |>
+  mutate(taxon_id = ifelse(species > 10000000000,
+                           substr(species, start = 1, stop = 7),
+                           substr(species, start = 1, stop = 6)),
+         bioregion = ifelse(species > 10000000000,
+                            substr(species, start = 8, stop = 9),
+                            substr(species, start = 7, stop = 8)),
+         country_code = ifelse(species > 10000000000,
+                               substr(species, start = 10, stop = 11),
+                               substr(species, start = 9, stop = 10))) |>
+  mutate(taxon_id = as.numeric(taxon_id),
+         bioregion = as.numeric(bioregion),
+         country_code = as.numeric(country_code)) |>
+  left_join(BR_lookup, multiple = "all") |>
+  left_join(spp_lookup, multiple = "all")
+
+rep_formatted <- rep |>
+  dplyr::select(-c(column_label, rep, target, shortfall)) |>
+  filter(species != 999999) |>
+  mutate(taxon_id = ifelse(species > 10000000000,
+                           substr(species, start = 1, stop = 7),
+                           substr(species, start = 1, stop = 6)),
+         bioregion = ifelse(species > 10000000000,
+                            substr(species, start = 8, stop = 9),
+                            substr(species, start = 7, stop = 8)),
+         country_code = ifelse(species > 10000000000,
+                               substr(species, start = 10, stop = 11),
+                               substr(species, start = 9, stop = 10))) |>
+  mutate(taxon_id = as.numeric(taxon_id),
+         bioregion = as.numeric(bioregion),
+         country_code = as.numeric(country_code)) |>
+  left_join(BR_lookup, multiple = "all") |>
+  left_join(spp_lookup, multiple = "all")
 
 
-contribution <- rij_sol |>
-  mutate(contribution = amount*value) |>
-  group_by(species) |>
-  summarise(rep = sum(contribution, na.rm = TRUE))|>
-  left_join(targets) |>
-  mutate(shortfall = rep-target) |>
-  mutate(shortfall_perc = shortfall/target) |>
-  mutate(carbon_weight = "IC",
-         scenario = "IC",
-         country_contraint = "IC") |>
-  mutate(target_met = ifelse(shortfall<0,"no", "yes")) |>
-  mutate(spp = ifelse(species != 999999, "biodiv", "carbon"))
+##################### abstract statistics ##############################
 
-write_csv(contribution, "data/solutions/representation_IC.csv")
+ic_join <- rep_IC |>
+  rename(rep_ic = rep,
+         shortfall_ic = shortfall,
+         shortfall_perc_ic = shortfall_perc) |>
+  dplyr::select(species, rep_ic, shortfall_ic, shortfall_perc_ic)
+
+## carbon percentage change
+c_perc <- rep |>
+  left_join(ic_join) |>
+  filter(spp == "carbon") |>
+  filter(rep_ic > 0) |>
+  mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(rep_diff = rep_diff*100) |>
+  arrange(-rep_diff)
+
+## conservation status
+b_status <- rep |>
+  left_join(ic_join) |>
+  filter(species != 999999) |>
+  mutate(target_met_ic = ifelse(shortfall_perc_ic < 0, 0, 1),
+         target_met = ifelse(shortfall_perc < 0, 0, 1)) |>
+  filter(target_met_ic<1) |>
+  mutate(improved = (target_met-target_met_ic)) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(improved = sum(improved)/length(unique(species))) |>
+  arrange(-improved)
 ```
 

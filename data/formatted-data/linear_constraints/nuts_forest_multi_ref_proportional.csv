@@ -7,11 +7,11 @@ AT22,WoodlandForest_multi,13.94761634095454
 AT31,WoodlandForest_multi,2.6063059197914473
 AT32,WoodlandForest_multi,16.2851700174244
 AT33,WoodlandForest_multi,35.51011746890024
-AT34,WoodlandForest_multi,-0.3135886706854732
+AT34,WoodlandForest_multi,0
 BE10,WoodlandForest_multi,5.023516467099476e-4
 BE21,WoodlandForest_multi,0.027336078028880856
 BE22,WoodlandForest_multi,0.9569597725346441
-BE23,WoodlandForest_multi,-0.0424216913866613
+BE23,WoodlandForest_multi,0
 BE24,WoodlandForest_multi,0.01653892778424697
 BE25,WoodlandForest_multi,0.2132930608615696
 BE31,WoodlandForest_multi,0.0017543132148786708
@@ -21,7 +21,7 @@ BE34,WoodlandForest_multi,6.315214385787382
 BE35,WoodlandForest_multi,3.6376362923784633
 BG01,WoodlandForest_multi,13.481581351842717
 BG02,WoodlandForest_multi,21.772657267739827
-BG03,WoodlandForest_multi,-1.2675250737934336
+BG03,WoodlandForest_multi,0
 BG04,WoodlandForest_multi,16.62781358329699
 BG05,WoodlandForest_multi,41.45182140936363
 BG06,WoodlandForest_multi,13.736169772304512
@@ -44,7 +44,7 @@ DE23,WoodlandForest_multi,44.130075131994154
 DE24,WoodlandForest_multi,33.04418592667682
 DE25,WoodlandForest_multi,9.073159189561514
 DE26,WoodlandForest_multi,24.968137090222434
-DE27,WoodlandForest_multi,-0.5445465821595076
+DE27,WoodlandForest_multi,0
 DE30,WoodlandForest_multi,0.9493975654386358
 DE40,WoodlandForest_multi,60.78688261309547
 DE50,WoodlandForest_multi,0.4543813951497198
@@ -107,8 +107,8 @@ FR25,WoodlandForest_multi,17.150989065735583
 FR26,WoodlandForest_multi,51.354204806462505
 FR30,WoodlandForest_multi,7.54166425466156
 FR41,WoodlandForest_multi,2.084375524858364
-FR42,WoodlandForest_multi,-13.612609503084405
-FR43,WoodlandForest_multi,-8.14418249308653
+FR42,WoodlandForest_multi,0
+FR43,WoodlandForest_multi,0
 FR51,WoodlandForest_multi,43.662299671790414
 FR52,WoodlandForest_multi,28.691881819392332
 FR53,WoodlandForest_multi,21.385350247976117
@@ -142,7 +142,7 @@ HU05,WoodlandForest_multi,34.825712690512184
 HU06,WoodlandForest_multi,18.59892179642068
 HU07,WoodlandForest_multi,19.49873525691031
 IE01,WoodlandForest_multi,0.8485358003517223
-IE02,WoodlandForest_multi,-2.099823027678256
+IE02,WoodlandForest_multi,0
 IT11,WoodlandForest_multi,88.13163161345202
 IT12,WoodlandForest_multi,8.68820731444289
 IT13,WoodlandForest_multi,39.11606582876014

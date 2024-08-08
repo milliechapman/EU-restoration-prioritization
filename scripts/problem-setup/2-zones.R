@@ -507,3 +507,82 @@ manual_bounded_constraints |>
 unique(manual_bounded_constraints$zone)
 write_csv(manual_bounded_constraints, "data/formatted-data/manual_bounded_constraints_CLC.csv")
 
+######### adjust LB for pixels that are not complete in IC data ######
+
+zones <- read_csv("data/formatted-data/zone_id.csv") |>
+  mutate(name = paste0("z", id))
+pu_in_EU <- read_csv("data/formatted-data/pu_in_EU.csv")
+
+plotting_data_ic <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv") |>
+  dplyr::select(-Status) |>
+  pivot_longer(-PUID) |> rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu)) |>
+  drop_na(id) |> rename(zone = name) |>
+  separate(zone, c('maes_label', 'intensity'), sep = "_")
+
+IC_mismatch <- plotting_data_ic |>
+  group_by(id) |>
+  summarise(total = sum(value, na.rm = T)) |>
+  rename(pu = id) |>
+  mutate(diff = 1-total) |> # add to rivers and lakes LB to avoid benefits etc.
+  dplyr::select(pu, diff) |>
+  mutate(diff = diff) |>
+  mutate(diff = ifelse(diff>0.99,0.99, diff)) |>
+  mutate(diff = ifelse(diff < 0, 0, diff))
+write_csv(IC_mismatch, "data/formatted-data/pu_adjustment.csv")
+sum(IC_mismatch$diff)
+
+manual_bounded_constraints_adj <- read_csv("data/formatted-data/manual_bounded_constraints_CLC.csv") |>
+  rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  left_join(zones) |>
+  mutate(zone = name) |>
+  dplyr::select(-c(name, EU_id, nuts2id)) |>
+  #rename(zone=name) |>
+  dplyr::select(pu, zone, lower, upper) |>
+  drop_na() |>
+  pivot_longer(-c(pu, zone)) |>
+  pivot_wider(names_from = zone, values_from = value) |>
+  mutate(across(everything(), ~replace_na(.x, 0))) |>
+  rename(bound = name) |>
+  pivot_longer(-c(pu, bound)) |>
+  pivot_wider(names_from = bound, values_from = value) |>
+  rename(zone = name) |>
+  left_join(IC_mismatch) |>
+  mutate(upper = ifelse(zone == "z23", (upper + diff), upper)) |>
+  mutate(lower = ifelse(zone == "z23", (lower + diff), lower)) |>
+  mutate(lower = ifelse(zone %in% c("z23", "z24"), upper, lower)) |>
+  # allow production expansion to meet targets
+  mutate(upper = ifelse(zone == "z13", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z14", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z18", 1, upper)) |>
+  mutate(lower = ifelse(zone == "z5", 0, lower)) |>
+  mutate(upper = ifelse(zone == "z5", 0, upper)) |>
+  mutate(lower = ifelse(lower > upper, upper, lower)) |>
+  dplyr::select(-diff)
+
+write_csv(manual_bounded_constraints_adj, "data/formatted-data/manual_bounded_constraints_CLC_adj.csv")
+
+manual_bounded_constraints_fm <- read_csv("data/formatted-data/manual_bounded_constraints_CLC.csv") |>
+  rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  mutate(pu = EU_id) |>
+  left_join(zones) |>
+  mutate(zone = name) |>
+  dplyr::select(-c(name, EU_id, nuts2id)) |>
+  #rename(zone=name) |>
+  dplyr::select(pu, zone, lower, upper) |>
+  drop_na() |>
+  # allow production expansion to meet targets
+  mutate(upper = ifelse(zone == "z13", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z14", 1, upper)) |>
+  mutate(upper = ifelse(zone == "z18", 1, upper)) |>
+  mutate(lower = ifelse(zone == "z5", 0, lower)) |>
+  mutate(upper = ifelse(zone == "z5", 0, upper)) |>
+  mutate(lower = ifelse(lower > upper, upper, lower)) |>
+  mutate(lower = ifelse(zone %in% c("z23", "z24"), upper, lower))
+
+write_csv(manual_bounded_constraints_fm, "data/formatted-data/manual_bounded_constraints_CLC_fm.csv")

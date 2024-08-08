@@ -205,18 +205,13 @@ diff_table <- all_constraints |>
   dplyr::select(-NURGCDL)
 write_csv(as_tibble(diff_table)|>dplyr::select(-geometry), "data/diff_table_ic.csv")
 
-all_constraints |>
-  mutate(diff_2020 = area_2020_ref- area_2020_f455) |>
-  ggplot(aes(fill = diff)) +
-  geom_sf(aes(geometry = geometry)) +
-  theme_bw() + facet_wrap(~name) +
-  scale_fill_gradient2()
 
 a <- all_constraints |> mutate(area = area) |>
   mutate(perc_ref_change = ref_change/area) |>
   ggplot(aes(fill = perc_ref_change*100)) +
   geom_sf(aes(geometry = geometry)) +
-  theme_map() + facet_wrap(~name) +
+  #theme_map() +
+  facet_wrap(~name) +
   theme(legend.position = "bottom") +
   scale_fill_gradient2()
 

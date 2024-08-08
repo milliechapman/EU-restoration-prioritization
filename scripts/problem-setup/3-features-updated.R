@@ -78,7 +78,7 @@ spp <- stack(spp)
 # just species names
 names(spp) <- substring(names(spp), 20)
 
-feature_targets <- read_rds("data/formatted-data/feature_targets.rds")
+#feature_targets <- read_rds("data/formatted-data/feature_targets.rds")
 
 names_sdms <- names(spp)
 
@@ -86,8 +86,8 @@ names_sdms <- as_tibble(names_sdms)|>
   mutate(sdm = 1) |>
   rename(name = value)
 
-feature_targets |> left_join(names_sdms) |>
-  drop_na(sdm)
+# feature_targets |> left_join(names_sdms) |>
+#   drop_na(sdm)
 
 
 # Grab the PU template (same used for LC analysis)
@@ -97,6 +97,7 @@ PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   #st_transform(crs = st_crs(natura)) |>
   dplyr::mutate(PUID = seq(1:length(geometry))) |>
   dplyr::select(-Corine_2018_cropland)
+
 # make it into a raster
 PU_raster <- fasterize(PU_template, spp[[1]], field = "PUID")
 
@@ -291,18 +292,24 @@ filelist_temp <- list.files("data/SpeciesData/CurrentSDMs//",
 spp <- rast(paste0("data/SpeciesData/CurrentSDMs/", filelist_temp))
 spp <- stack(spp)
 # just species names
-names(spp) <- substring(names(spp), 24)
 
-feature_targets <- read_rds("data/formatted-data/feature_targets.rds")
+# Function to split the string and keep the part after "__"
+split_and_keep_after <- function(x) {
+  split_string <- strsplit(x, split = "__")[[1]]
+  return(substr(split_string[2], 1, nchar(split_string[2]) - 4))
+}
 
-names_sdms <- names(spp)
+# Apply the function to each element in the list
+names_sdms <- lapply(filelist_temp, split_and_keep_after)
+names_sdms <- unlist(names_sdms)
+
+names(spp) <- names_sdms
+
+#feature_targets <- read_rds("data/formatted-data/feature_targets.rds")
 
 names_sdms <- as_tibble(names_sdms)|>
   mutate(sdm = 1) |>
   rename(name = value)
-
-feature_targets |> left_join(names_sdms) |>
-  drop_na(sdm)
 
 # make it into a raster
 PU_raster <- fasterize(PU_template, spp[[1]], field = "PUID")
@@ -563,8 +570,8 @@ pu_carbon_current_production <- pu_carbon_current_production |>
                          ifelse(id == 17 |id == 15, carbon_soc, # low intensity crop and pasture
                                 ifelse(id == 14, carbon_soc* 0.76, #high intensity pasture
                                        ifelse(id == 16, carbon_soc*0.95, #mid crop
-                                            ifelse(id == 12, (carbon_soc + WoodlandForest_laea_tCha.tif)*0.7,
-                                                   ifelse(id == 13, (carbon_soc + WoodlandForest_laea_tCha.tif)*0.4,
+                                            ifelse(id == 12, (carbon_soc + WoodlandForest_laea_tCha.tif)*0.7,# forest multi
+                                                   ifelse(id == 13, (carbon_soc + WoodlandForest_laea_tCha.tif)*0.4, # forest production
                                                           0))))))) |>
   rename(pu = layer, amount = carbon, zone = id) |>
   mutate(feature = 999999) |>

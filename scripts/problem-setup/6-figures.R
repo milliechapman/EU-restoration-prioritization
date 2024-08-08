@@ -59,7 +59,7 @@ bioregion <-read_csv("data/formatted-data/pu_in_EU_BR.csv") |>
   dplyr::select(pu, BR_ID) |>
   rename(id = pu)
 
-country <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data_55.csv") |>
+country <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data.csv") |>
   dplyr::select(NUTS_ID, pu) |>
   mutate(country = substr(NUTS_ID, start = 1, stop = 2))|>
   rename(id = pu) |> dplyr::select(-NUTS_ID)
@@ -73,7 +73,7 @@ PU_template_EU <- pu_in_EU |>
 colors <- c("grey", met.brewer(name="Isfahan1",type="continuous"))
 
 rep_IC <- read_csv("data/solutions/representation_IC.csv")
-rep <- read_csv("data/solutions/representation_REF_f455_scenarios_proportional.csv")
+rep <- read_fst("data/solutions/representation_REF_f455_scenarios_proportional.fst")
 
 rep_IC_formatted <- rep_IC |>
   dplyr::select(-c(rep, target, shortfall)) |>
@@ -128,7 +128,7 @@ c_perc <- rep |>
   mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
   group_by(spp, scenario, carbon_weight, country_contraint, future) |>
   summarise(rep_diff = rep_diff*100) |>
-  arrange(-rep_diff)
+  arrange(rep_diff)
 
 ## conservation status
 b_status <- rep |>
@@ -140,7 +140,7 @@ b_status <- rep |>
   mutate(improved = (target_met-target_met_ic)) |>
   group_by(spp, scenario, carbon_weight, country_contraint, future) |>
   summarise(improved = sum(improved)/length(unique(species))) |>
-  arrange(-improved)
+  arrange(improved)
 
 ## burden sharing
 rep |>
@@ -273,16 +273,20 @@ ggsave(filename = 'figures/updated/pareto-all.png', plot = pareto_all_plot, widt
 
 
 ################### figure 1 - conceptual ##########################
-solution <- read_csv("data-formatted/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_EVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv") |>
+solution <- read_csv("data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_f455.csv") |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 colnames(solution) <- c("id", (zone_id$zone))
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
 
 solution_table <- pu_in_EU |> rename(id = pu) |> #plot_data |>
   left_join(PU_template) |>
   dplyr::select(-id) |>
   rename(id = EU_id) |>
   left_join(solution) |>
-  pivot_longer(-c(nuts2id:geometry))
+  pivot_longer(-c(nuts2id:geometry)) |>
+  left_join(pu_adjustment) |>
+  mutate(value = ifelse(name == "RiversLakes_natural_conserve", value-diff, value))
 
 solution_table_plot <- solution_table |>
   mutate(zone = name) |>
@@ -344,7 +348,6 @@ spr_cons <- app(solution_raster[[21]], sum)
 png("figures/updated/spr_cons.png", width = 5, height = 5, units = "in", res = 400)
 plot(spr_cons, col = colors)
 dev.off()
-
 
 
 ########## Table ###################
@@ -442,7 +445,7 @@ ggsave(filename = 'figures/updated/burden-sharing-pareto-new.png', plot = pareto
 
 ## map of difference
 country_true <- plotting_data |> filter(action == "restore",
-                                        carbon == "0.3",
+                                        carbon == "0.5",
                                         country_TF == "EVEN",
                                         scenario == "Baseline",
                                         future == "f455.csv") |>
@@ -453,7 +456,7 @@ country_true <- plotting_data |> filter(action == "restore",
 country_true <- fasterize(st_as_sf(country_true), raster, field = "value")
 
 country_false <- plotting_data |> filter(action == "restore",
-                                         carbon == "0.3",
+                                         carbon == "0.5",
                                          country_TF == "FLEX",
                                          scenario == "Baseline",
                                          future == "f455.csv") |>
@@ -490,7 +493,7 @@ fig3d_data <- plotting_data |>
   mutate(perc = amount/area_country) |> dplyr::select(-c(amount, area_country)) |>
   pivot_wider(names_from = country_TF, values_from = perc) |>
   filter(action == "restore") |>
-  mutate(diff = `FLEX`-`EVEN`) |> drop_na() |>
+  mutate(diff = `UNEVEN`-`EVEN`) |> drop_na() |>
   pivot_longer(-c(country:action, diff))
 
 fig3d_box <- fig3d_data |>
@@ -508,7 +511,7 @@ ggsave("figures/updated/burden-sharing-countries.png", fig3d_box, width = 4.5, h
 ## land cover
 colors = c(met.brewer(name="Kandinsky",n=4,type="continuous"))[c(4,2,1)]
 fig3c_data <- plotting_data |>
-  filter(carbon == 0.3) |>
+  filter(carbon == 0.5) |>
   filter(action == "restore",
          scenario == "Baseline",
          future == "f455.csv") |>
@@ -538,7 +541,7 @@ library(ggpubr)
 unique(rep_formatted$speciesgroup)
 
 spp <- rep_formatted |> filter(scenario == "Baseline",
-                               future == "f455", carbon_weight == "0.3") |>
+                               future == "f455", carbon_weight == "0.5") |>
   mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
   mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
   dplyr::select(speciesgroup, taxon_id) |> unique() |>
@@ -606,7 +609,7 @@ pareto_restoration2 <- b_status |> ungroup() |> dplyr::select(-spp) |>
   left_join(c_perc |> ungroup() |> dplyr::select(-spp)) |>
   ggplot(aes(x = improved*100, y = rep_diff)) +
   geom_line(aes(linetype = scenario, alpha = country_contraint), lwd = 1) +
-  geom_point(aes(col = carbon_weight), alpha = 0.9, size = 4) +
+  geom_point(aes(col = as.numeric(carbon_weight)), alpha = 0.9, size = 4) +
   theme_classic() +
   scale_color_gradientn(colors = met.brewer("OKeeffe2")) +
   #scale_color_manual(values = c("grey2", "grey")) +
@@ -643,7 +646,7 @@ hn <-plotting_data |> filter(action == "restore",
 
 hn |>
   filter(type == "Nature \n landscape") |>
-  mutate(perc = value/41046*100) |>
+  mutate(perc = value/40000*100) |>
   arrange(-value)
 
 basline |> filter() |> arrange(-value)
@@ -659,7 +662,7 @@ hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv",
 
 hn_baseline_box <- basline |> bind_rows(hn) |> filter(future == "f455.csv",
                                                       carbon >0,
-                                                      carbon == 0.3) |>
+                                                      carbon == 0.5) |>
   ggplot() + geom_col(aes(y = value/10, x = type, fill = scenario), position =position_dodge(.7),
                       width = 0.6) +
   theme_classic() +
@@ -677,7 +680,7 @@ ggsave("figures/updated/hn_baseline_box.png", hn_baseline_box,
 basline <- plotting_data |> filter(action == "restore",
                                       scenario == "Baseline",
                                       country_TF == "FLEX",
-                                      carbon == "0.3") |>
+                                      carbon == "0.5") |>
   mutate(type = ifelse(maes_label== "Cropland", "Cropland de-intensification",
                        ifelse(maes_label %in% c("Pasture"), "Pasture de-intensification",
                               ifelse(maes_label %in% c("WoodlandForest"), "Forestry de-intensification",
@@ -693,7 +696,7 @@ plot(basline)
 hn <-plotting_data |> filter(action == "restore",
                                      scenario == "HN",
                                      country_TF == "FLEX",
-                                     carbon == 0.3) |>
+                                     carbon == 0.5) |>
   mutate(type = ifelse(maes_label== "Cropland", "Cropland de-intensification",
                        ifelse(maes_label %in% c("Pasture"), "Pasture de-intensification",
                               ifelse(maes_label %in% c("WoodlandForest"), "Forestry de-intensification",
@@ -779,7 +782,7 @@ rest_biodiv <- rep_formatted |>
   mutate(speciesgroup = paste0(speciesgroup, "\n n spp=", nspp))
 
 
-# Box plot facetted by "dose"
+# Box plot facetted
 rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met_rel",
                                 color = "scenario",
                                 add = "jitter",

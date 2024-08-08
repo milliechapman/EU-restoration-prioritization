@@ -138,6 +138,7 @@ Dendrocopos_syriacus
 Picus_viridis
 Picus_canus
 Psittacula_krameri
+Myiopsitta_monachus
 Pterocles_orientalis
 Pterocles_alchata
 Vanellus_vanellus
@@ -271,6 +272,7 @@ Anthus_campestris
 Anthus_petrosus
 Anthus_cervinus
 Motacilla_citreola
+Motacilla_cinerea
 Lullula_arborea
 Melanocorypha_calandra
 Galerida_cristata
@@ -386,6 +388,7 @@ Anas_acuta
 Anas_strepera
 Netta_rufina
 Melanitta_fusca
+Melanitta_nigra
 Alopochen_aegyptiaca
 Aythya_ferina
 Aythya_nyroca
@@ -393,6 +396,7 @@ Aythya_fuligula
 Aythya_marila
 Clangula_hyemalis
 Mergellus_albellus
+Oxyura_jamaicensis
 Bucephala_clangula
 Cygnus_olor
 Cygnus_atratus
@@ -401,6 +405,7 @@ Somateria_mollissima
 Mergus_serrator
 Aix_sponsa
 Aix_galericulata
+Marmaronetta_angustirostris
 Upupa_epops
 Botrychium_simplex
 Asplenium_adulterinum
@@ -560,6 +565,7 @@ Puffinus_mauretanicus
 Puffinus_yelkouan
 Puffinus_puffinus
 Philomachus_pugnax
+Pica_pica
 Garrulus_glandarius
 Passer_domesticus
 Passer_montanus
@@ -711,6 +717,7 @@ Meleagris_gallopavo
 Emberiza_melanocephala
 Falco_tinnunculus
 Loxia_curvirostra
+Motacilla_alba
 Motacilla_flava
 Parus_major
 Phasianus_colchicus

@@ -10,7 +10,9 @@ library(gurobi)
 rm(list = ls())
 
 cores <- 7
+
 fst::threads_fst(nr_of_threads = cores, reset_after_fork = NULL)  # Set number for fst
+options(future.globals.maxSize = 8000 * 1024^2)
 
 setwd(dir = "~/EU-restoration-prioritization/") # to run in terminal...
 
@@ -93,9 +95,9 @@ problem_setup <- function(
                            sense = "<=",
                            data = restoration)
 
-  # no less than restoration 75% restoration target
+  # no less than restoration 25% restoration target
   p_solve <- p_solve |>
-    add_linear_constraints(threshold = nrow(pu)*restoration_constraint*0.50,
+    add_linear_constraints(threshold = nrow(pu)*restoration_constraint*0,
                            sense = ">=",
                            data = restoration)
 
@@ -264,11 +266,12 @@ problem_setup <- function(
 
       nuts2_forest_prod <- read_csv("data/formatted-data/linear_constraints/nuts_forest_prod_55_proportional.csv")
 
-      country_prod_constraints <- read_csv("data/formatted-data/linear_constraints/country_constraints_55_proportional.csv")
+      country_prod_constraints <- read_csv("data/formatted-data/linear_constraints/country_constraints_55_proportional.csv")|>
+        mutate(value = ifelse(country %in% c("CY"), 0,value))
 
       # deal with in-feasible nuts2
 
-      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455.csv") |>
+      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_f455_adj.csv") |>
         mutate(adj = ifelse(TF =="FALSE", 1,0))
 
       if(production_constraints %in% c("NUTS2adj", "NUTS2")){
@@ -695,7 +698,7 @@ problem_setup <- function(
 
       # deal with in-feasible nuts2
 
-      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_ref.csv") |>
+      infeas_nuts2 <- read_csv("data/feasibility-tests/nuts2_feasible_ref_adj.csv") |>
         mutate(adj = ifelse(TF =="FALSE", 1,0))
 
       if(production_constraints %in% c("NUTS2adj", "NUTS2")){
@@ -1213,7 +1216,7 @@ names <- readRDS("data/formatted-data/SDMNameMatching.rds") |>
 
 names$speciesname <- sub(" ", "_", names$speciesname)
 
-#targs <- read_csv("data-formatted/targets_split_formatted.csv")
+# targs <- read_csv("data-formatted/targets_split_formatted.csv")
 # target formatting to align with RIJ table -- this isn't perfect, but there are
 # <4% mismatch between the features we have in the rij table and the features
 # we have targets for (due to small outstanding mismatches in spp names)
@@ -1226,7 +1229,7 @@ targs_existing <- read_csv("data/formatted-data/targets_split.csv") |>
 
 # setdiff(feat$id,targs_existing$feature)
 
-# to line up with rij spp (2 spp that dont have targets bc ~0)
+# to line up with rij spp
 targs_default <- data.frame(
   feature = setdiff(feat$name, targs_existing$feature))|>
   mutate( target = 22,
@@ -1250,40 +1253,52 @@ targs <- targs |> left_join(targs_rm) |>
   dplyr::select(-remove)
 
 # all the constraints
+IC_mismatch <- read_fst("data/plotting/plotting_data_ic.fst") |> group_by(id) |>
+  summarise(total = sum(value, na.rm = T)) |>
+  rename(pu = id) |>
+  mutate(diff = 1-total) |> # add to rivers and lakes LB to avoid benefits etc.
+  dplyr::select(pu, diff) |>
+  mutate(diff = diff - 0.02) |>
+  mutate(diff = ifelse(diff < 0, 0, diff))
 
-manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_CLC.csv") |>
-  rename(pu = PUID) |>
-  left_join(pu_in_EU) |>
-  mutate(pu = EU_id) |>
-  left_join(zones) |>
-  mutate(zone = name) |>
-  dplyr::select(-c(name, EU_id, nuts2id)) |>
-  #rename(zone=name) |>
-  dplyr::select(pu, zone, lower, upper) |>
-  drop_na() |>
-  # allow production expansion to meet targets
-  mutate(upper = ifelse(zone == "z13", 1, upper)) |>
-  mutate(upper = ifelse(zone == "z14", 1, upper)) |>
-  mutate(upper = ifelse(zone == "z18", 1, upper)) |>
-  mutate(lower = ifelse(zone == "z5", 0, lower)) |>
-  mutate(upper = ifelse(zone == "z5", 0, upper)) |>
-  mutate(lower = ifelse(lower >upper, upper, lower)) |>
-  mutate(lower = ifelse(zone %in% c("z23", "z24"), upper, lower))
+manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_CLC_adj.csv")
+
+# manual_bounded_constraints <- read_csv("data/formatted-data/manual_bounded_constraints_CLC.csv") |>
+#   rename(pu = PUID) |>
+#   left_join(pu_in_EU) |>
+#   mutate(pu = EU_id) |>
+#   left_join(zones) |>
+#   mutate(zone = name) |>
+#   dplyr::select(-c(name, EU_id, nuts2id)) |>
+#   #rename(zone=name) |>
+#   dplyr::select(pu, zone, lower, upper) |>
+#   drop_na() |>
+#   # allow production expansion to meet targets
+#   mutate(upper = ifelse(zone == "z13", 1, upper)) |>
+#   mutate(upper = ifelse(zone == "z14", 1, upper)) |>
+#   mutate(upper = ifelse(zone == "z18", 1, upper)) |>
+#   mutate(lower = ifelse(zone == "z5", 0, lower)) |>
+#   mutate(upper = ifelse(zone == "z5", 0, upper)) |>
+#   mutate(lower = ifelse(lower > upper, upper, lower)) |>
+#   left_join(IC_mismatch) |>
+#   mutate(upper = ifelse(zone == "z23", upper+diff, upper)) |>
+#   mutate(lower = ifelse(zone %in% c("z23", "z24"), upper, lower)) |>
+#   dplyr::select(-diff)
 
 # all the constraints
 pu_cropland_low_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_low_budget_data.csv")
 
-pu_cropland_med_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_med_budget_data_55.csv")
+pu_cropland_med_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_med_budget_data.csv")
 
-pu_cropland_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_high_budget_data_55.csv")
+pu_cropland_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_crop_high_budget_data.csv")
 
-pu_pasture_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_high_budget_data_55.csv")
+pu_pasture_high_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_high_budget_data.csv")
 
-pu_pasture_low_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data_55.csv")
+pu_pasture_low_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data.csv")
 
-pu_forest_multi_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_multi_budget_data_55.csv")
+pu_forest_multi_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_multi_budget_data.csv")
 
-pu_forest_prod_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_prod_budget_data_55.csv")
+pu_forest_prod_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_forest_prod_budget_data.csv")
 
 nuts2_wetland_rest <- read_csv("data/formatted-data/linear_constraints/wetland_targets.csv")
 pu_wetland_rest_budget_data <- read_csv("data/formatted-data/linear_constraints/pu_wetland_rest_budget_data.csv")
@@ -1344,37 +1359,109 @@ p <- problem(x = pu,
              rij = rij) |>
   add_min_shortfall_objective(nrow(pu))
 
-
 # ### solve ######
-scenarios <-
+scenarios1 <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = 1.5, #c(0.1,0.5,0.9,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN", "FLEX", "UNEVEN"),
+    carbon_weight = c(0.5),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "FLEX", #c("EVEN", "FLEX", "UNEVEN"),
     restoration_constraint = 0.141,
     restoration_only = FALSE,
     production_constraints = "NUTS2adj",
     wetlands = TRUE,
-    restoration_scenario = c("Baseline", "HN"),
+    restoration_scenario = c("HN"),#, "HN"),
     future = c("f455", "ref"),
     name = "proportional",
     SI = FALSE
   )
 
-scenarios_only_rest <-
+scenarios2 <-
   tidyr::crossing(# Do all combinations of:
-    carbon_weight = 0.5,#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = "FLEX",
-    restoration_constraint =  0.141,
+    carbon_weight = c(0.5),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "FLEX", #c("EVEN", "FLEX", "UNEVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
     wetlands = TRUE,
-    restoration_only = TRUE,
-    production_constraints = "NA",
-    restoration_scenario =  "Baseline",
-    future = "f455",
-    name = "onlyRest",
-    SI = TRUE
+    restoration_scenario = c("HN"),#, "HN"),
+    future = c("f455", "ref"),
+    name = "proportional",
+    SI = FALSE
   )
 
-scenarios <- scenarios[1,] #|> bind_rows(scenarios_only_rest)
+scenarios3 <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(0.9),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "FLEX", #c("EVEN", "FLEX", "UNEVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),#, "HN"),
+    future = c("f455", "ref"),
+    name = "proportional",
+    SI = FALSE
+  )
+
+scenarios4 <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(1.5),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "EVEN", #c("EVEN", "FLEX", "UNEVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("HN"),#, "HN"),
+    future = c("f455", "ref"),
+    name = "proportional",
+    SI = FALSE
+  )
+
+scenarios5 <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(2),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "EVEN", #c("EVEN", "FLEX", "UNEVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("Baseline"),#, "HN"),
+    future = c("f455", "ref"),
+    name = "proportional",
+    SI = FALSE
+  )
+
+scenarios6 <-
+  tidyr::crossing(# Do all combinations of:
+    carbon_weight = c(2),#,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+    country_constraints = "UNEVEN", #c("EVEN", "FLEX", "UNEVEN"),
+    restoration_constraint = 0.141,
+    restoration_only = FALSE,
+    production_constraints = "NUTS2adj",
+    wetlands = TRUE,
+    restoration_scenario = c("HN"),#, "HN"),
+    future = c("ref"),
+    name = "proportional",
+    SI = FALSE
+  )
+
+scenarios <- bind_rows(scenarios1, scenarios2,
+                       scenarios3, scenarios4,
+                       scenarios5, scenarios6)
+#
+# scenarios_only_rest <-
+#   tidyr::crossing(# Do all combinations of:
+#     carbon_weight = 0.5,#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+#     country_constraints = "FLEX",
+#     restoration_constraint =  0,
+#     wetlands = TRUE,
+#     restoration_only = FALSE,
+#     production_constraints = "NUTS2adj",
+#     restoration_scenario =  "Baseline",
+#     future = "f455",
+#     name = "norest",
+#     SI = TRUE
+#   )
+
 #
 # # # functionalize the for-loop contents
 iter <- function(i) {
@@ -1410,250 +1497,250 @@ plan(multicore, workers = 6) # see ?future::plan, for other options
   future_map(iter)
 
 
-# ################## SI: Biodiversity sensitivity #############
-
-rij_biodiv_low <- read_fst("data/formatted-data/features_split.fst") |>
-  rename(species = feature) |>
-  #mutate(amount = round(amount)) |>
-  left_join(pu_in_EU) |>
-  mutate(pu = EU_id) |>
-  dplyr::select(pu, species, zone, amount) |>
-  drop_na(pu) |>
-  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
-  mutate(amount = replace_na(amount,0)) |>
-  mutate(amount = ifelse(amount == 0.3, 0.1,
-                         ifelse(amount == 0.6, 0.3, amount)))
-
-# pre set up basic problem
-p <- problem(x = pu,
-             features = feat,
-             zones = z,
-             cost_column = cost_columns,
-             rij = rij_biodiv_low) |>
-  add_min_shortfall_objective(nrow(pu))
-
-scenarios <-
-  tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN"),
-    restoration_constraint = 0.141,
-    restoration_only = FALSE,
-    production_constraints = "NUTS2adj",
-    wetlands = TRUE,
-    restoration_scenario = c("Baseline"),
-    future = c("f455"),
-    name = "biodivLOW"
-  )
-
-iter <- function(i) {
-  problem_setup(
-    cores = parallel::detectCores(),
-    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
-    pu, # pu data (x from p)
-    targs,
-    manual_bounded_constraints = manual_bounded_constraints,
-    carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = scenarios$restoration_constraint[[i]],
-    #conservation_constraint = 0.3,
-    production_constraints = scenarios$production_constraints[[i]],
-    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
-    restoration_only = scenarios$restoration_only[[i]],
-    wetlands = scenarios$wetlands[[i]],
-    nuts2_shp = nuts2_shp,
-    pu_restoration_budget_data = pu_restoration_budget_data,
-    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
-    restoration_scenario = scenarios$restoration_scenario[[i]],
-    future = scenarios$future[[i]],
-    name = scenarios$name[[i]],
-    solver = "gurobi",
-    SI = TRUE)
-}
-
-# ## plan and run scenarios
-## plan and run scenarios
-plan(multicore, workers = 6) # see ?future::plan, for other options
-
-1:nrow(scenarios) %>%
-  future_map(iter)
+# # ################## SI: Biodiversity sensitivity #############
 #
+# rij_biodiv_low <- read_fst("data/formatted-data/features_split.fst") |>
+#   rename(species = feature) |>
+#   #mutate(amount = round(amount)) |>
+#   left_join(pu_in_EU) |>
+#   mutate(pu = EU_id) |>
+#   dplyr::select(pu, species, zone, amount) |>
+#   drop_na(pu) |>
+#   mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+#   mutate(amount = replace_na(amount,0)) |>
+#   mutate(amount = ifelse(amount == 0.3, 0.1,
+#                          ifelse(amount == 0.6, 0.3, amount)))
 #
-# # ## Sensitivity biodiversity high
-rij_biodiv_high <- read_fst("data/formatted-data/features_split.fst") |>
-  rename(species = feature) |>
-  #mutate(amount = round(amount)) |>
-  left_join(pu_in_EU) |>
-  mutate(pu = EU_id) |>
-  dplyr::select(pu, species, zone, amount) |>
-  drop_na(pu) |>
-  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
-  mutate(amount = replace_na(amount,0)) |>
-  mutate(amount = ifelse(amount == 0.3, 0.5,
-                         ifelse(amount == 0.6, 0.8, amount)))
-
-p <- problem(x = pu,
-             features = feat,
-             zones = z,
-             cost_column = cost_columns,
-             rij = rij_biodiv_high) |>
-  add_min_shortfall_objective(nrow(pu))
-
-scenarios <-
-  tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN"),
-    restoration_constraint = 0.141,
-    restoration_only = FALSE,
-    production_constraints = "NUTS2adj",
-    wetlands = TRUE,
-    restoration_scenario = c("Baseline"),
-    future = c("f455"),
-    name = "biodivHIGH"
-  )
-
-iter <- function(i) {
-  problem_setup(
-    cores = parallel::detectCores(),
-    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
-    pu, # pu data (x from p)
-    targs,
-    manual_bounded_constraints = manual_bounded_constraints,
-    carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = scenarios$restoration_constraint[[i]],
-    #conservation_constraint = 0.3,
-    production_constraints = scenarios$production_constraints[[i]],
-    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
-    restoration_only = scenarios$restoration_only[[i]],
-    wetlands = scenarios$wetlands[[i]],
-    nuts2_shp = nuts2_shp,
-    pu_restoration_budget_data = pu_restoration_budget_data,
-    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
-    restoration_scenario = scenarios$restoration_scenario[[i]],
-    future = scenarios$future[[i]],
-    name = scenarios$name[[i]],
-    solver = "gurobi",
-    SI = TRUE)
-}
-
-# ## plan and run scenarios
-## plan and run scenarios
-plan(multicore, workers = 6) # see ?future::plan, for other options
-
-1:nrow(scenarios) %>%
-  future_map(iter)
-
-# ## Sensitivity carbon cropland
-
-rij_carbon_noimpact <- read_fst("data/formatted-data/features_split.fst") |>
-  rename(species = feature) |>
-  #mutate(amount = round(amount)) |>
-  left_join(pu_in_EU) |>
-  mutate(pu = EU_id) |>
-  dplyr::select(pu, species, zone, amount) |>
-  drop_na(pu) |>
-  mutate(amount = ifelse(amount<0.001, 0, amount)) |>
-  mutate(amount = replace_na(amount,0)) |>
-  mutate(amount = ifelse(zone %in% c(16, 17,18,1,2) & species == 999999,
-                           1, amount))
-p <- problem(x = pu,
-             features = feat,
-             zones = z,
-             cost_column = cost_columns,
-             rij = rij_carbon_noimpact) |>
-  add_min_shortfall_objective(nrow(pu))
-
-scenarios <-
-  tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN"),
-    restoration_constraint = 0.141,
-    restoration_only = FALSE,
-    production_constraints = "NUTS2adj",
-    wetlands = TRUE,
-    restoration_scenario = c("Baseline"),
-    future = c("f455"),
-    name = "carbonSI"
-  )
-
-iter <- function(i) {
-  problem_setup(
-    cores = parallel::detectCores(),
-    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
-    pu, # pu data (x from p)
-    targs,
-    manual_bounded_constraints = manual_bounded_constraints,
-    carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = scenarios$restoration_constraint[[i]],
-    #conservation_constraint = 0.3,
-    production_constraints = scenarios$production_constraints[[i]],
-    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
-    restoration_only = scenarios$restoration_only[[i]],
-    wetlands = scenarios$wetlands[[i]],
-    nuts2_shp = nuts2_shp,
-    pu_restoration_budget_data = pu_restoration_budget_data,
-    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
-    restoration_scenario = scenarios$restoration_scenario[[i]],
-    future = scenarios$future[[i]],
-    name = scenarios$name[[i]],
-    solver = "gurobi",
-    SI = TRUE)
-}
-
-# ## plan and run scenarios
-## plan and run scenarios
-plan(multicore, workers = 6) # see ?future::plan, for other options
-
-1:nrow(scenarios) %>%
-  future_map(iter)
+# # pre set up basic problem
+# p <- problem(x = pu,
+#              features = feat,
+#              zones = z,
+#              cost_column = cost_columns,
+#              rij = rij_biodiv_low) |>
+#   add_min_shortfall_objective(nrow(pu))
 #
-# ### baselines
+# scenarios <-
+#   tidyr::crossing(# Do all combinations of:
+#     carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+#     country_constraints = c("EVEN"),
+#     restoration_constraint = 0.141,
+#     restoration_only = FALSE,
+#     production_constraints = "NUTS2adj",
+#     wetlands = TRUE,
+#     restoration_scenario = c("Baseline"),
+#     future = c("f455"),
+#     name = "biodivLOW"
+#   )
 #
-p <- problem(x = pu,
-             features = feat,
-             zones = z,
-             cost_column = cost_columns,
-             rij = rij) |>
-  add_min_shortfall_objective(nrow(pu))
-
-scenarios <-
-  tidyr::crossing(# Do all combinations of:
-    carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
-    country_constraints = c("EVEN"),
-    restoration_constraint = 0.141,
-    restoration_only = FALSE,
-    production_constraints = "NUTS2adj",
-    wetlands = TRUE,
-    restoration_scenario = c("Baseline"),
-    future = c("f455"),
-    name = "proportional"
-  )
-
-iter <- function(i) {
-  problem_setup(
-    cores = parallel::detectCores(),
-    p, # conservation problem + min shortfall objective/ speeds things up to do this first...
-    pu, # pu data (x from p)
-    targs,
-    manual_bounded_constraints = manual_bounded_constraints,
-    carbon_weight = scenarios$carbon_weight[[i]],
-    restoration_constraint = scenarios$restoration_constraint[[i]],
-    #conservation_constraint = 0.3,
-    production_constraints = scenarios$production_constraints[[i]],
-    country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
-    restoration_only = scenarios$restoration_only[[i]],
-    wetlands = scenarios$wetlands[[i]],
-    nuts2_shp = nuts2_shp,
-    pu_restoration_budget_data = pu_restoration_budget_data,
-    pu_restoration_budget_data_country = pu_restoration_budget_data_country,
-    restoration_scenario = scenarios$restoration_scenario[[i]],
-    future = scenarios$future[[i]],
-    name = scenarios$name[[i]],
-    solver = "gurobi",
-    SI = TRUE)
-}
-
+# iter <- function(i) {
+#   problem_setup(
+#     cores = parallel::detectCores(),
+#     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+#     pu, # pu data (x from p)
+#     targs,
+#     manual_bounded_constraints = manual_bounded_constraints,
+#     carbon_weight = scenarios$carbon_weight[[i]],
+#     restoration_constraint = scenarios$restoration_constraint[[i]],
+#     #conservation_constraint = 0.3,
+#     production_constraints = scenarios$production_constraints[[i]],
+#     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+#     restoration_only = scenarios$restoration_only[[i]],
+#     wetlands = scenarios$wetlands[[i]],
+#     nuts2_shp = nuts2_shp,
+#     pu_restoration_budget_data = pu_restoration_budget_data,
+#     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+#     restoration_scenario = scenarios$restoration_scenario[[i]],
+#     future = scenarios$future[[i]],
+#     name = scenarios$name[[i]],
+#     solver = "gurobi",
+#     SI = TRUE)
+# }
+#
+# # ## plan and run scenarios
 # ## plan and run scenarios
-## plan and run scenarios
-plan(multicore, workers = 6) # see ?future::plan, for other options
-
-1:nrow(scenarios) %>%
-  future_map(iter)
+# plan(multicore, workers = 6) # see ?future::plan, for other options
+#
+# 1:nrow(scenarios) %>%
+#   future_map(iter)
+# #
+# #
+# # # ## Sensitivity biodiversity high
+# rij_biodiv_high <- read_fst("data/formatted-data/features_split.fst") |>
+#   rename(species = feature) |>
+#   #mutate(amount = round(amount)) |>
+#   left_join(pu_in_EU) |>
+#   mutate(pu = EU_id) |>
+#   dplyr::select(pu, species, zone, amount) |>
+#   drop_na(pu) |>
+#   mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+#   mutate(amount = replace_na(amount,0)) |>
+#   mutate(amount = ifelse(amount == 0.3, 0.5,
+#                          ifelse(amount == 0.6, 0.8, amount)))
+#
+# p <- problem(x = pu,
+#              features = feat,
+#              zones = z,
+#              cost_column = cost_columns,
+#              rij = rij_biodiv_high) |>
+#   add_min_shortfall_objective(nrow(pu))
+#
+# scenarios <-
+#   tidyr::crossing(# Do all combinations of:
+#     carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+#     country_constraints = c("EVEN"),
+#     restoration_constraint = 0.141,
+#     restoration_only = FALSE,
+#     production_constraints = "NUTS2adj",
+#     wetlands = TRUE,
+#     restoration_scenario = c("Baseline"),
+#     future = c("f455"),
+#     name = "biodivHIGH"
+#   )
+#
+# iter <- function(i) {
+#   problem_setup(
+#     cores = parallel::detectCores(),
+#     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+#     pu, # pu data (x from p)
+#     targs,
+#     manual_bounded_constraints = manual_bounded_constraints,
+#     carbon_weight = scenarios$carbon_weight[[i]],
+#     restoration_constraint = scenarios$restoration_constraint[[i]],
+#     #conservation_constraint = 0.3,
+#     production_constraints = scenarios$production_constraints[[i]],
+#     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+#     restoration_only = scenarios$restoration_only[[i]],
+#     wetlands = scenarios$wetlands[[i]],
+#     nuts2_shp = nuts2_shp,
+#     pu_restoration_budget_data = pu_restoration_budget_data,
+#     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+#     restoration_scenario = scenarios$restoration_scenario[[i]],
+#     future = scenarios$future[[i]],
+#     name = scenarios$name[[i]],
+#     solver = "gurobi",
+#     SI = TRUE)
+# }
+#
+# # ## plan and run scenarios
+# ## plan and run scenarios
+# plan(multicore, workers = 6) # see ?future::plan, for other options
+#
+# 1:nrow(scenarios) %>%
+#   future_map(iter)
+#
+# # ## Sensitivity carbon cropland
+#
+# rij_carbon_noimpact <- read_fst("data/formatted-data/features_split.fst") |>
+#   rename(species = feature) |>
+#   #mutate(amount = round(amount)) |>
+#   left_join(pu_in_EU) |>
+#   mutate(pu = EU_id) |>
+#   dplyr::select(pu, species, zone, amount) |>
+#   drop_na(pu) |>
+#   mutate(amount = ifelse(amount<0.001, 0, amount)) |>
+#   mutate(amount = replace_na(amount,0)) |>
+#   mutate(amount = ifelse(zone %in% c(16, 17,18,1,2) & species == 999999,
+#                            1, amount))
+# p <- problem(x = pu,
+#              features = feat,
+#              zones = z,
+#              cost_column = cost_columns,
+#              rij = rij_carbon_noimpact) |>
+#   add_min_shortfall_objective(nrow(pu))
+#
+# scenarios <-
+#   tidyr::crossing(# Do all combinations of:
+#     carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+#     country_constraints = c("EVEN"),
+#     restoration_constraint = 0.141,
+#     restoration_only = FALSE,
+#     production_constraints = "NUTS2adj",
+#     wetlands = TRUE,
+#     restoration_scenario = c("Baseline"),
+#     future = c("f455"),
+#     name = "carbonSI"
+#   )
+#
+# iter <- function(i) {
+#   problem_setup(
+#     cores = parallel::detectCores(),
+#     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+#     pu, # pu data (x from p)
+#     targs,
+#     manual_bounded_constraints = manual_bounded_constraints,
+#     carbon_weight = scenarios$carbon_weight[[i]],
+#     restoration_constraint = scenarios$restoration_constraint[[i]],
+#     #conservation_constraint = 0.3,
+#     production_constraints = scenarios$production_constraints[[i]],
+#     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+#     restoration_only = scenarios$restoration_only[[i]],
+#     wetlands = scenarios$wetlands[[i]],
+#     nuts2_shp = nuts2_shp,
+#     pu_restoration_budget_data = pu_restoration_budget_data,
+#     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+#     restoration_scenario = scenarios$restoration_scenario[[i]],
+#     future = scenarios$future[[i]],
+#     name = scenarios$name[[i]],
+#     solver = "gurobi",
+#     SI = TRUE)
+# }
+#
+# # ## plan and run scenarios
+# ## plan and run scenarios
+# plan(multicore, workers = 6) # see ?future::plan, for other options
+#
+# 1:nrow(scenarios) %>%
+#   future_map(iter)
+# #
+# # ### baselines
+# #
+# p <- problem(x = pu,
+#              features = feat,
+#              zones = z,
+#              cost_column = cost_columns,
+#              rij = rij) |>
+#   add_min_shortfall_objective(nrow(pu))
+#
+# scenarios <-
+#   tidyr::crossing(# Do all combinations of:
+#     carbon_weight = c(0.1,0.5,0.9,1.5,2),#c(0.1, 0.3,seq(0.5,2, by = 0.5)),
+#     country_constraints = c("EVEN"),
+#     restoration_constraint = 0.141,
+#     restoration_only = FALSE,
+#     production_constraints = "NUTS2adj",
+#     wetlands = TRUE,
+#     restoration_scenario = c("Baseline"),
+#     future = c("f455"),
+#     name = "proportional"
+#   )
+#
+# iter <- function(i) {
+#   problem_setup(
+#     cores = parallel::detectCores(),
+#     p, # conservation problem + min shortfall objective/ speeds things up to do this first...
+#     pu, # pu data (x from p)
+#     targs,
+#     manual_bounded_constraints = manual_bounded_constraints,
+#     carbon_weight = scenarios$carbon_weight[[i]],
+#     restoration_constraint = scenarios$restoration_constraint[[i]],
+#     #conservation_constraint = 0.3,
+#     production_constraints = scenarios$production_constraints[[i]],
+#     country_constraints = scenarios$country_constraints[[i]], # EVEN, FLEX, UNEVEN
+#     restoration_only = scenarios$restoration_only[[i]],
+#     wetlands = scenarios$wetlands[[i]],
+#     nuts2_shp = nuts2_shp,
+#     pu_restoration_budget_data = pu_restoration_budget_data,
+#     pu_restoration_budget_data_country = pu_restoration_budget_data_country,
+#     restoration_scenario = scenarios$restoration_scenario[[i]],
+#     future = scenarios$future[[i]],
+#     name = scenarios$name[[i]],
+#     solver = "gurobi",
+#     SI = TRUE)
+# }
+#
+# # ## plan and run scenarios
+# ## plan and run scenarios
+# plan(multicore, workers = 6) # see ?future::plan, for other options
+#
+# 1:nrow(scenarios) %>%
+#   future_map(iter)

@@ -52,7 +52,7 @@ above_avg_bold <- formatter("span",
 
 ```{r }
 library(tidyverse)
-rest_table <- read_csv("data/rest_table_results.csv")
+rest_table <- read_csv("../data/rest_table_results.csv")
 
 
 t <- rest_table |> 
