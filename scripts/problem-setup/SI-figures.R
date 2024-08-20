@@ -30,7 +30,7 @@ rij <- read_fst("data/formatted-data/features_split.fst") |>
 
 ## Calculate representation and save
 
-filelist_temp <- list.files("data-formatted/sol/SI-sol/",
+filelist_temp <- list.files("data/solutions/sol/SI-sol/",
                            # pattern = c("*proportional_gurobi_f455.csv|*proportional_gurobi_ref.csv"),
                             full.names = T)
 shortfalls <- list()
@@ -69,13 +69,13 @@ for (i in 1:length(filelist_temp)) {
   }
   if(name == "biodivLOW"){
     rij_rel = rij |>
-      mutate(amount = ifelse(amount == 0.3, 0.1 & species != 999999,
-                             ifelse(amount == 0.6, 0.3, amount)))
+      mutate(amount = ifelse(amount == 0.3 & species != 999999, 0.1,
+                             ifelse(amount == 0.6 & species != 999999, 0.3, amount)))
   }
   if(name == "biodivHIGH"){
     rij_rel = rij |>
-      mutate(amount = ifelse(amount == 0.3, 0.5,
-                             ifelse(amount == 0.6, 0.8, amount)))
+      mutate(amount = ifelse(amount == 0.3 & species != 999999, 0.5,
+                             ifelse(amount == 0.6 & species != 999999, 0.8, amount)))
   }
 
   rij_sol <- rij_rel |>
@@ -243,7 +243,7 @@ bioregion <-read_csv("data/formatted-data/pu_in_EU_BR.csv") |>
   dplyr::select(pu, BR_ID) |>
   rename(id = pu)
 
-country <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data_55.csv") |>
+country <- read_csv("data/formatted-data/linear_constraints/pu_pasture_low_budget_data.csv") |>
   dplyr::select(NUTS_ID, pu) |>
   mutate(country = substr(NUTS_ID, start = 1, stop = 2))|>
   rename(id = pu) |> dplyr::select(-NUTS_ID)
