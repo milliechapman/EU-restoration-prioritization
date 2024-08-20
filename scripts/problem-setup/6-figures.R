@@ -8,6 +8,7 @@ require(viridisLite)
 library(MetBrewer)
 library(ggridges)
 library(rasterVis)
+library(fst)
 #devtools::install_github("yutannihilation/ggsflabel")
 #library(ggsflabel)
 library(RStoolbox)
@@ -37,7 +38,7 @@ BR_lookup <- read_csv("data/plotting/bioregion_code.csv") |>
   rename(bioregion = BRIDnum) |>
   dplyr::select(code, bioregion)
 country_lookup <- read_csv("data/plotting/country_code.csv")
-# plotting_data <- read_csv("data/plotting/plotting_data_ref_f455.csv")
+plotting_data <- read_fst("data/plotting/plotting_data_ref_f455.fst")
 
 PU_template <- raster("data/landcover/10km/Corine_2018_cropland.tif") |>
   rasterToPolygons() |>
@@ -128,10 +129,10 @@ c_perc <- rep |>
   mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
   group_by(spp, scenario, carbon_weight, country_contraint, future) |>
   summarise(rep_diff = rep_diff*100) |>
-  arrange(rep_diff)
+  arrange(-rep_diff)
 
 ## conservation status
-b_status <- rep |>
+b_status <-rep |>
   left_join(ic_join) |>
   filter(species != 999999) |>
   mutate(target_met_ic = ifelse(shortfall_perc_ic < 0, 0, 1),
@@ -141,6 +142,29 @@ b_status <- rep |>
   group_by(spp, scenario, carbon_weight, country_contraint, future) |>
   summarise(improved = sum(improved)/length(unique(species))) |>
   arrange(improved)
+
+
+
+  # rep |>
+  # left_join(ic_join) |>
+  # filter(species != 999999) |>
+  # mutate(spp = substr(species, start = 1, stop =nchar(species)-4)) |>
+  # mutate(n_spp = n_distinct(spp)) |>
+  # mutate(target_met_ic = ifelse(shortfall_perc_ic < 0, 0, 1),
+  #        target_met = ifelse(shortfall_perc < 0, 0, 1)) |>
+  # group_by(spp, n_spp, scenario, carbon_weight, country_contraint, future) |>
+  # summarise(IC_met_n = sum(target_met_ic, na.rm = T),
+  #           sol_met_n = sum(target_met, na.rm = T)) |>
+  # mutate(improved = ifelse((sol_met_n - IC_met_n)<1,0,1)) |>
+  # mutate(worse = ifelse((sol_met_n - IC_met_n)<0,1,0)) |>
+  # #filter(target_met_ic<1) |>
+  # #mutate(improved = (target_met-target_met_ic)) |>
+  # group_by(scenario, carbon_weight, country_contraint, future, n_spp) |>
+  # summarise(improved = sum(improved)/n_spp,
+  #           worse = sum(worse)/n_spp) |>
+  # arrange(-improved) |>
+  # mutate(diff = IC_shortfall_n - improved) |> #/length(unique(species))) |>
+  # arrange(-diff)
 
 ## burden sharing
 rep |>
@@ -316,8 +340,8 @@ solution_raster <- rast(solution_raster)
 names(solution_raster)
 
 restore <- c(1,2,6,3,4,5,7,8,9,10)
-produce <- c(13:18, 26)
-conserve <- c(19:25,12)
+produce <- c(12:18, 26)
+conserve <- c(19:25)
 
 colors <- c("grey", met.brewer(name="VanGogh3",n=20,type="continuous"))
 myPal <- colors
@@ -371,6 +395,51 @@ rest_table <- test |> ungroup() |>
   pivot_wider(names_from = type, values_from = area)
 
 write_csv(rest_table, "data/rest_table_results.csv")
+
+library(formattable)
+library("htmltools")
+library("webshot")
+plain_formatter <- formatter("span")
+plain_formatter(c(1, 2, 3))
+width_formatter <- formatter("span",
+                             style = x ~ style(width = suffix(x, "px")))
+width_formatter(c(10, 11, 12))
+sign_formatter <- formatter("span",
+                            style = x ~ style(color = ifelse(x > 0, "green",
+                                                             ifelse(x < 0, "red", "black"))))
+sign_formatter(c(-1, 0, 1))
+
+t <- rest_table |>
+  mutate(`% total area restored` = round(percent_restored*100, 1),
+         `% deintensification` = round((deintensification/area_restored)*percent_restored*100,1),
+         `% nature` = round((nature/area_restored)*percent_restored*100,1),
+         `% rewetting` = round((rewetting/area_restored)*percent_restored*100,1)) |>
+  mutate(country_TF = ifelse(country_TF == "FLEX", "Flexible",
+                             ifelse(country_TF == "EVEN", "Even ", "Unconstrained")) ) |>
+  mutate(future = ifelse(future == "f455.csv", "Fit for 55", "BAU")) |>
+  rename(`burden sharing` = country_TF,
+         `restoration scenario` = scenario,
+         `production constraints` = future) |>
+  dplyr::select(-c(area_restored, nature, rewetting, deintensification, percent_restored)) |>
+  #dplyr::select(-c(area_restored)) |>
+  formattable(list(
+    `% total area restored` =color_tile("grey","#654321"),
+    `% nature` = color_bar("darkgreen"),
+    `% rewetting` = color_bar("lightblue"),
+    `% deintensification` = color_bar("#FFCC00")))
+
+export_formattable <- function(f, file, width = "100%", height = NULL,
+                               background = "white", delay = 0.2)
+{
+  w <- as.htmlwidget(f, width = width, height = height)
+  path <- html_print(w, background = background, viewer = NULL)
+  url <- paste0("file:///", gsub("\\\\", "/", normalizePath(path)))
+  webshot(url,
+          file = file,
+          selector = ".formattable_widget",
+          delay = delay)
+}
+export_formattable(t,"figures/updated/table.png")
 
 #################### burden_sharing #######################
 ########## pareto
@@ -493,7 +562,7 @@ fig3d_data <- plotting_data |>
   mutate(perc = amount/area_country) |> dplyr::select(-c(amount, area_country)) |>
   pivot_wider(names_from = country_TF, values_from = perc) |>
   filter(action == "restore") |>
-  mutate(diff = `UNEVEN`-`EVEN`) |> drop_na() |>
+  mutate(diff = `FLEX`-`EVEN`) |> drop_na() |>
   pivot_longer(-c(country:action, diff))
 
 fig3d_box <- fig3d_data |>
@@ -741,7 +810,7 @@ nd <- ggR(nature_diff, layer = 1, maxpixels = 1e10,forceCat = FALSE,
           geom_raster = TRUE, coord_equal = TRUE,stretch = "none", ggObj = TRUE) +
   ggthemes::theme_map(base_size = 11,base_family = 'Arial') +
   scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
-                   guide = guide_colorbar(title = "pasture Difference",ticks = FALSE) ) +
+                   guide = guide_colorbar(title = "nature Difference",ticks = FALSE) ) +
   theme(legend.position = c(.05,.15),legend.background = element_rect(fill = 'transparent'),
         plot.title = element_text(size = 23, hjust = .5),plot.subtitle = element_text(hjust = .5)) +
   labs(x = "", y = "")
@@ -754,7 +823,7 @@ fd <- ggR(forest_diff, layer = 1, maxpixels = 1e10,forceCat = FALSE,
           geom_raster = TRUE, coord_equal = TRUE,stretch = "none", ggObj = TRUE) +
   ggthemes::theme_map(base_size = 11,base_family = 'Arial') +
   scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
-                   guide = guide_colorbar(title = "pasture Difference",ticks = FALSE) ) +
+                   guide = guide_colorbar(title = "forest Difference",ticks = FALSE) ) +
   theme(legend.position = c(.05,.15),legend.background = element_rect(fill = 'transparent'),
         plot.title = element_text(size = 23, hjust = .5),plot.subtitle = element_text(hjust = .5)) +
   labs(x = "", y = "")
@@ -1022,7 +1091,7 @@ ggsave(filename = 'figures/updated/rest-scenario-pareto.png', plot = pareto_scen
 ##################### SI restoration only ########################
 colors <- c("grey", met.brewer(name="VanGogh3",n=20,type="continuous"))
 
-solution <- read_csv("data/solutions/sol/sol_carbon_0.5_restoration_0.2_production_TRUE_country_TRUE_bioregion_FALSE_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_globiom_IC_nm.csv") |>
+solution <- read_csv("data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_f455.csv") |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 colnames(solution) <- c("id", (zone_id$zone))
 
@@ -1051,7 +1120,7 @@ png("figures/updated/rest_agg2.png", width = 5, height = 5, units = "in", res = 
 plot(rest_agg, col = colors)
 dev.off()
 
-solution_niave <- read_csv("data/solutions/sol/rest_only/sol_carbon_0.5_restoration_0.2_production_FALSE_country_TRUE_bioregion_FALSE_wetlands_TRUE_onlyrestoration_TRUE_scenario_Baseline.csv")|>
+solution_niave <- read_csv("data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_TRUE_scenario_Baseline_onlyrest_highs_f455.csv")|>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 colnames(solution_niave) <- c("id", (zone_id$zone))
 
@@ -1085,7 +1154,7 @@ rest_bar_coord <- as_tibble(solution_table_plot) |>
   filter(action == "restore") |>
   left_join(rest_bar_niave)
 
-bar_rest_SI <- rest_bar_coord |> select(name, area, area_naive) |>
+bar_rest_SI <- rest_bar_coord |> dplyr::select(name, area, area_naive) |>
   rename(area_joint = area) |>
   pivot_longer(cols = c("area_joint", "area_naive"), names_to = "scenario") |>
   ggplot(aes(x = reorder(name, -value), y = value/10, fill = scenario)) + geom_bar(position = "dodge", stat="identity", width = 0.6) +
@@ -1133,6 +1202,116 @@ plot(rest_agg, col = colors)
 dev.off()
 
 
+## land cover figure
+nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
+  rename(NUTS_ID = NURGCDL2) |>
+  mutate(nuts2id = seq(1:260)) |>
+  mutate(country = str_sub(NUTS_ID,1,2)) |>
+  filter(country != "UK") |>
+  dplyr::select(nuts2id, NUTS_ID)
+
+plotting_data_ic <- read_csv("data/outputs/2-zones/PU_lc_intensity.csv") |>
+  dplyr::select(-Status) |>
+  pivot_longer(-PUID) |> rename(pu = PUID) |>
+  left_join(pu_in_EU) |>
+  rename(id = EU_id) |>
+  dplyr::select(-c(pu)) |>
+  drop_na(id) |> rename(zone = name) |>
+  separate(zone, c('maes_label', 'intensity'), sep = "_") |>
+  left_join(as_tibble(nuts2) |> dplyr::select(-geometry))
+
+write_fst(plotting_data_ic, "data/plotting/plotting_data_ic.fst")
+
+##### land use change figure
+plotting_data_ic <- read_fst("data/plotting/plotting_data_ic.fst")
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
+filelist_temp <- "data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv"
+nm <- "sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv"
+carbon <- str_split(nm, "_")[[1]][3]
+country_TF <- str_split(nm, "_")[[1]][9]
+scenario <- str_split(nm, "_")[[1]][15]
+future <- str_split(nm, "_")[[1]][18]
+solution <- read_csv(filelist_temp[[i]]) |>
+  dplyr::select(id, solution_1_z1:solution_1_z26)
+zone_id <- read_csv("data/formatted-data/zone_id.csv")
+
+colnames(solution) <- c("id", (zone_id$zone))
+
+solution_table <- pu_in_EU |>
+  rename(id = pu) |>
+  dplyr::select(-id) |>
+  rename(id = EU_id) |> drop_na() |>
+  left_join(solution, by = "id") |>
+  pivot_longer(-c(nuts2id:id)) |>
+  left_join(pu_adjustment) |>
+  mutate(value = ifelse(name == "RiversLakes_natural_conserve", value-diff, value))
+
+nuts2_area <- solution_table |>
+  dplyr::select(nuts2id, id) |> unique() |>
+  group_by(nuts2id) |>
+  count()
+
+solution_table_plot <- solution_table |>
+  mutate(zone = name) |>
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
+  mutate(carbon = carbon,
+         country_TF = country_TF,
+         scenario = scenario,
+         future = future)
+
+LC_change_fig_sol <- solution_table_plot |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(nuts2id, intensity) |> summarise(value_sol = sum(value,na.rm = T))
 
 
+plotting_data_ic |> filter(maes_label == "RiversLakes")
+solution_table |> filter(name == "RiversLakes_natural_conserve")
+
+LC_change_fig_ic <- plotting_data_ic |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(nuts2id, intensity) |> summarise(value_ic = sum(value,na.rm = T))
+
+LC_change_fig <- LC_change_fig_sol |> full_join(LC_change_fig_ic) |>
+  mutate(delta = value_sol-value_ic) |>
+  left_join(nuts2_area) |>
+  mutate(delta = delta/n)
+
+sum(LC_change_fig$value_sol)/41046
+
+LC_change_plot <- LC_change_fig |> left_join(nuts2) |> #filter(intensity == "high") |>
+  #filter(intensity == "high")|>
+  ggplot() + geom_sf(aes(fill = delta, geometry = geometry)) + theme_classic() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  facet_wrap(~intensity, nrow = 1)
+
+ggsave("figures/lc_change.png", LC_change_plot)
+
+LC_change_bar <- solution_table_plot |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(maes_label, intensity) |> summarise(value_sol = sum(value,na.rm = T))
+
+LC_change_fig_ic <- plotting_data_ic |>
+  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
+                            ifelse(intensity %in% c("high", "prod"), "high",
+                                   ifelse(intensity %in% c("primary", "natural"),
+                                          "natural",intensity)))) |>
+  group_by(maes_label, intensity) |> summarise(value_ic = sum(value,na.rm = T))
+
+test <- LC_change_fig_ic |> full_join(LC_change_bar) |>
+  mutate(diff = value_sol - value_ic) |>
+  mutate(lc = paste0(maes_label, intensity)) |>
+  arrange(-diff) |>
+  mutate(diff_perc = diff/41046*100) |>
+  ggplot() + geom_col(aes(x = diff_perc, y = fct_reorder(lc, diff))) +
+  theme_classic() +
 
