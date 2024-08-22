@@ -24,7 +24,7 @@ library(scico)
 Read in one of the solution
 
 ```{r}
-sol <- "../data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.141_production_NA_country_FLEX_wetlands_TRUE_onlyrestoration_TRUE_scenario_Baseline_onlyRest_gurobi_f455.csv"
+sol <- "../data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_f455.csv"
 
 #sol <- list.files("../data-formatted/sol/", pattern = "globiomICflat_gurobi_f455.csv", full.names = T)
 solution <- read_csv(sol) |>

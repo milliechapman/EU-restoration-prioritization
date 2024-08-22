@@ -75,6 +75,7 @@ colors <- c("grey", met.brewer(name="Isfahan1",type="continuous"))
 
 rep_IC <- read_csv("data/solutions/representation_IC.csv")
 rep <- read_fst("data/solutions/representation_REF_f455_scenarios_proportional.fst")
+rep_norest <- read_fst("data/solutions/representation_norest.fst")
 
 rep_IC_formatted <- rep_IC |>
   dplyr::select(-c(rep, target, shortfall)) |>
@@ -112,6 +113,115 @@ rep_formatted <- rep |>
   left_join(BR_lookup, multiple = "all") |>
   left_join(spp_lookup, multiple = "all")
 
+rep_norest_formatted <- rep_norest |>
+  dplyr::select(-c(column_label, rep, target, shortfall)) |>
+  filter(species != 999999) |>
+  mutate(taxon_id = ifelse(species > 10000000000,
+                           substr(species, start = 1, stop = 7),
+                           substr(species, start = 1, stop = 6)),
+         bioregion = ifelse(species > 10000000000,
+                            substr(species, start = 8, stop = 9),
+                            substr(species, start = 7, stop = 8)),
+         country_code = ifelse(species > 10000000000,
+                               substr(species, start = 10, stop = 11),
+                               substr(species, start = 9, stop = 10))) |>
+  mutate(taxon_id = as.numeric(taxon_id),
+         bioregion = as.numeric(bioregion),
+         country_code = as.numeric(country_code)) |>
+  left_join(BR_lookup, multiple = "all") |>
+  left_join(spp_lookup, multiple = "all")
+
+
+biodiv_ic <- rep_IC_formatted |>
+  group_by(target_met, scenario) |> count() |>
+  pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met = yes/(yes+no)*100) |>
+  mutate(scenario == "2020") |>
+  mutate(scenario == ifelse(scenario == "HN", "High \n Nature", scenario))
+
+
+biodiv_sol <- rep_formatted |>
+  filter(country_contraint == "FLEX") |>
+  group_by(target_met, scenario, future, carbon_weight) |>
+  count() |>
+  pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met = yes/(yes+no)*100) |>
+  mutate(future = ifelse(future == "f455", "Fit for 55", "BAU")) |>
+  mutate(scenario = ifelse(scenario == "HN", "High \n nature", scenario))
+
+biodiv_noNRL <-rep_norest_formatted |>
+  group_by(future, target_met) |>
+  count() |>
+  pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met = yes/(yes+no)*100) |>
+  mutate(future = ifelse(future == "f455", "Fit for 55", "BAU")) |>
+  mutate(label = paste0("2030 no NRL (", future, ")"))
+
+biodiv_sol$scenario
+nrl_biodiv_plot <- ggboxplot(biodiv_sol, x = "scenario", y = "perc_met",
+                                color = "scenario",
+                                add = "jitter") +
+  geom_hline(data = biodiv_ic,
+             aes(yintercept = perc_met), color = "#2c456b", linetype = "dashed", lwd = 1) +
+  geom_text(data = biodiv_ic, aes(x = 1.5, y = perc_met, label = "2020"),
+            color = "#2c456b", hjust = 0.55,vjust = -0.4, size = 3.5) +
+  geom_hline(data = biodiv_noNRL,
+             aes(yintercept = perc_met, color = "#4779c4"), linetype = "dotdash", lwd =1) +
+  geom_text(data = biodiv_noNRL, aes(x = 1.5, y = perc_met, label = label, color = "#4779c4"),
+             hjust = 0.5, vjust = 2, size = 3.5) +
+  # stat_compare_means(aes(label = ..p.signif..))  +
+  theme_bw() +
+  scale_color_manual(values = c( "#4779c4", "grey", "black", "#4779c4", "black")) +
+  ylim(0,62) +
+  theme(legend.position = "none") +
+  labs(x = "", y = "% of species targets met") +
+  theme(axis.text.x = element_text(size = 11)) +
+  facet_wrap(~future, nrow = 1)#+
+
+ggsave("figures/updated/nrl_biodiv_plot.png", nrl_biodiv_plot, width = 3.7, height = 4, dpi = 300)
+
+c_perc <- rep |>
+  left_join(ic_join) |>
+  filter(country_contraint == "FLEX") |>
+  filter(spp == "carbon") |>
+  filter(rep_ic > 0) |>
+  mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(rep_diff = rep_diff*100) |>
+  arrange(-rep_diff)
+
+c_perc_nonrl <- rep_norest |>
+  left_join(ic_join) |>
+  filter(spp == "carbon") |>
+  filter(rep_ic > 0) |>
+  mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(rep_diff = rep_diff*100) |>
+  arrange(-rep_diff)
+
+nrl_carbon_plot <- ggboxplot(c_perc, x = "scenario", y = "rep_diff",
+                             color = "scenario",
+                             add = "jitter") +
+  geom_hline(data = biodiv_ic,
+             aes(yintercept = 0), color = "#2c456b", linetype = "dashed", lwd = 1) +
+  geom_text(data = biodiv_ic, aes(x = 1.5, y = 0, label = scenario),
+            color = "#2c456b", hjust = 0.55,vjust = -0.4, size = 3.5) +
+  geom_hline(data = c_perc_nonrl,
+             aes(yintercept = rep_diff, color = future), linetype = "dotdash", lwd =1) +
+  geom_text(data = c_perc_nonrl, aes(x = 1.5, y = rep_diff, label = future, color = future),
+            hjust = 0.35, vjust = 1.4, size = 3.5) +
+  # stat_compare_means(aes(label = ..p.signif..))  +
+  theme_bw() +
+  scale_color_manual(values = c( "grey", "#4779c4", "black", "#4779c4")) +
+  theme(legend.position = "none") +
+  labs(x = "", y = "% increase in land carbon \n (relative to 2020 conditions)") +
+  theme(axis.text.x = element_text(size = 12)) +
+  facet_wrap(~future, nrow = 1)
+
+ggsave("figures/updated/nrl_carbon_plot.png", nrl_carbon_plot, width = 3.7, height = 4, dpi = 300)
+
+### for later figures, just f455
+rep_norest_formatted <- rep_norest_formatted |> filter(future == "f455")
 
 ##################### abstract statistics ##############################
 
@@ -141,7 +251,7 @@ b_status <-rep |>
   mutate(improved = (target_met-target_met_ic)) |>
   group_by(spp, scenario, carbon_weight, country_contraint, future) |>
   summarise(improved = sum(improved)/length(unique(species))) |>
-  arrange(improved)
+  arrange(-improved)
 
 
 
@@ -485,7 +595,9 @@ ggsave(filename = 'figures/updated/burden-sharing-pareto.png', plot = pareto_bur
 
 
 ## pareto new metrics
-pareto_burden_plot_new <- b_status |> ungroup() |>
+pareto_burden_plot_new <- b_status |>
+  filter(carbon_weight %in% c("0.1","0.5", "0.9","1.5", "2")) |>
+  ungroup() |>
   dplyr::select(-spp) |> filter(carbon_weight > 0) |>
   filter(scenario == "Baseline",
          future == "f455") |>
@@ -496,6 +608,7 @@ pareto_burden_plot_new <- b_status |> ungroup() |>
   geom_point() +
   #geom_point(aes(alpha =scenario)) +
   theme_classic() +
+  xlim(24.5, 26.2) +
   #ylim(11, 40) +
   #xlim(52, 62) +
   #scale_color_manual(values = c("grey2", "grey")) +
@@ -571,7 +684,7 @@ fig3d_box <- fig3d_data |>
   geom_boxplot()  +
   scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
                    guide = guide_colorbar(title = "Difference",ticks = FALSE) ) +  coord_flip() + theme_classic() + #theme(legend.position = "none") +
-  labs(x = element_blank()) + labs(y = "restoration priority area \n (% land area; II-I all scenarios)") + geom_hline(yintercept = 0, linetype="dashed") +
+  labs(x = element_blank()) + labs(y = "difference restoration priority \n (% land area; II-I all scenarios)") + geom_hline(yintercept = 0, linetype="dashed") +
   theme(axis.text.y = element_text(size = 11),
         axis.text.x = element_text(size = 11))
 
@@ -605,9 +718,12 @@ lj_biodiv_ic <- rep_IC_formatted |> filter(scenario == "IC") |>
   count() |> pivot_wider(names_from = target_met, values_from = n) |>
   mutate(perc_met_IC = yes/(yes+no)) |> dplyr::select(-c(no, yes))
 
-library(ggpubr)
-
-unique(rep_formatted$speciesgroup)
+norest_burden <- rep_norest_formatted |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
+  group_by(speciesgroup, target_met) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met_norest = yes/(yes+no)) |> dplyr::select(-c(no, yes))
 
 spp <- rep_formatted |> filter(scenario == "Baseline",
                                future == "f455", carbon_weight == "0.5") |>
@@ -636,22 +752,36 @@ burden_biodiv <- rep_formatted |>
   mutate(perc_met = perc_met*100) |>
   mutate(speciesgroup = paste0(speciesgroup, "\n n spp=", nspp))
 
+lj_biodiv_ic$speciesgroup <- unique(burden_biodiv$speciesgroup)
+lj_biodiv_ic <- lj_biodiv_ic |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2020", ""))
 
-  # Box plot facetted by "dose"
+norest_burden$speciesgroup <- unique(burden_biodiv$speciesgroup)
+norest_burden <- norest_burden |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2030 no NRL", ""))
+
 burden_biodiv_plot <- ggboxplot(burden_biodiv, x = "country_contraint", y = "perc_met",
                  color = "country_contraint",
-                 add = "jitter",
-                 facet.by = "speciesgroup", nrow = 1,
-                 short.panel.labs = TRUE, scales = "free") +
+                 add = "jitter") +
+  geom_hline(data = lj_biodiv_ic,
+             aes(yintercept = perc_met_IC*100), color = "#2c456b", linetype = "dashed", lwd = 1) +
+  geom_text(data = lj_biodiv_ic, aes(x = 1.5, y = perc_met_IC*100, label = label),
+            color = "#2c456b", hjust = 0.55,vjust = -0.4, size = 3.5) +
+  geom_hline(data = norest_burden,
+             aes(yintercept = perc_met_norest*100), color = "#4779c4", linetype = "dotdash", lwd =1) +
+  geom_text(data = norest_burden, aes(x = 1.5, y = perc_met_norest*100, label = label),
+            color = "#4779c4", hjust = 0.35, vjust = 1.4, size = 3.5) +
    # stat_compare_means(aes(label = ..p.signif..))  +
-  theme_classic() +
+  theme_bw() +
   scale_color_manual(values = c( "grey", "grey2", "darkred")) +
+  ylim(0,62) +
   theme(legend.position = "none") +
   labs(x = "", y = "percent of species targets met") +
-  theme(axis.text.x = element_text(size = 12)) #+
+  theme(axis.text.x = element_text(size = 12)) +
+  facet_wrap(~speciesgroup, nrow = 1)#+
   #scale_y_continuous(breaks=equal_breaks(n=10, s=0.1))
 
-ggsave("figures/updated/burden-sharing-spp.png",burden_biodiv_plot, width=8 , height = 3.2, dpi = 300)
+ggsave("figures/updated/burden-sharing-spp.png",burden_biodiv_plot, width=8.2 , height = 3.3, dpi = 300)
 
 ###################### restoration scenarios #############
 
@@ -661,6 +791,8 @@ pareto_restoration <- b_status |> ungroup() |> dplyr::select(-spp) |> filter(car
          future == "f455"
          ) |>
   left_join(c_perc |> ungroup() |> dplyr::select(-spp)) |>
+  mutate(carbon_weight = as.numeric(carbon_weight)) |>
+  #filter(carbon_weight > 0.1) |>
   ggplot(aes(x = improved*100, y = rep_diff)) +
   geom_line(aes(linetype = scenario, alpha = future), lwd = 1) +
   geom_point(aes(col = carbon_weight), alpha = 0.9, size = 4) +
@@ -669,7 +801,12 @@ pareto_restoration <- b_status |> ungroup() |> dplyr::select(-spp) |> filter(car
   #scale_color_manual(values = c("grey2", "grey")) +
   scale_alpha_manual(values = c(1, 0.4)) +
   labs(x = "% of species with improved \n conservation status",
-       y = "% increase in land carbon stock \n (compared to current conditions)")
+       y = "% increase in land carbon stock \n (compared to 2020 conditions)")
+
+
+png("figures/updated/pareto_rest.png", width = 5.5, height = 4, units = "in", res = 400)
+pareto_restoration
+dev.off()
 
 ## pareto new metrics
 pareto_restoration2 <- b_status |> ungroup() |> dplyr::select(-spp) |>
@@ -686,7 +823,7 @@ pareto_restoration2 <- b_status |> ungroup() |> dplyr::select(-spp) |>
   labs(x = "% of species with improved \n conservation status",
        y = "% increase in land carbon stock \n (compared to current conditions)")
 
-ggsave(filename = 'figures/updated/pareto_restoration.png', plot = pareto_restoration, width = 5.5, height = 4, dpi = 400)
+ggsave("figures/pareto_restoration.png",pareto_restoration2, width = 5.5, height = 4, dpi = 400)
 
 ############ restoration scenario barchart ######
 
@@ -833,6 +970,13 @@ ggsave(filename = 'figures/updated/fd.png', plot = fd, width = 16, height = 14, 
 
 ######## rest biodiv ###########
 
+lj_biodiv_ic <- rep_IC_formatted |> filter(scenario == "IC") |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
+  group_by(speciesgroup, target_met) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met_IC = yes/(yes+no)) |> dplyr::select(-c(no, yes))
+
 rest_biodiv <- rep_formatted |>
   filter(country_contraint == "FLEX",
          future == "f455") |>
@@ -848,21 +992,45 @@ rest_biodiv <- rep_formatted |>
   #mutate(country_contraint = ifelse(country_contraint == "EVEN", "I",
                                   #  ifelse(country_contraint == "FLEX", "II", "III"))) |>
   mutate(perc_met = round(perc_met*100,0)) |>
-  mutate(speciesgroup = paste0(speciesgroup, "\n n spp=", nspp))
+  mutate(speciesgroup = paste0(speciesgroup, "\n n spp=", nspp)) |>
+  mutate(scenario = ifelse(scenario == "Baseline", "Ba", scenario))
 
+
+norest_burden <- rep_norest_formatted |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
+  group_by(speciesgroup, target_met) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met_norest = yes/(yes+no)) |> dplyr::select(-c(no, yes))
+lj_biodiv_ic$speciesgroup <- unique(burden_biodiv$speciesgroup)
+lj_biodiv_ic <- lj_biodiv_ic |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2020", ""))
+
+norest_burden$speciesgroup <- unique(burden_biodiv$speciesgroup)
+norest_burden <- norest_burden |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2030 no NRL", ""))
 
 # Box plot facetted
-rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met_rel",
+rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met",
                                 color = "scenario",
                                 add = "jitter",
                                 facet.by = "speciesgroup", nrow = 1,
-                                short.panel.labs = TRUE, scales = "free") +
+                                short.panel.labs = TRUE) +
   # stat_compare_means(aes(label = ..p.signif..))  +
-  theme_classic() +
+  theme_bw() +
+  geom_hline(data = lj_biodiv_ic,
+             aes(yintercept = perc_met_IC*100), color = "#2c456b", linetype = "dashed", lwd = 1) +
+  geom_text(data = lj_biodiv_ic, aes(x = 1.5, y = perc_met_IC*100, label = label),
+            color = "#2c456b", hjust = 1,vjust = -0.4, size = 3.5) +
+  geom_hline(data = norest_burden,
+             aes(yintercept = perc_met_norest*100), color = "#4779c4", linetype = "dotdash", lwd =1) +
+  geom_text(data = norest_burden, aes(x = 1.5, y = perc_met_norest*100, label = label),
+            color = "#4779c4", hjust = 0.4, vjust = 1.4, size = 3.5) +
   scale_color_manual(values = c( "grey", "grey2", "darkred")) +
+  ylim(0,62) +
   theme(legend.position = "none") +
-  labs(x = "", y = "percent of species targets met \n relative to initial conditions") +
-  theme(axis.text.x = element_text(size = 12, angle = 45, hjust =1)) #+
+  labs(x = "", y = "percent of species targets met") +
+  theme(axis.text.x = element_text(size = 12)) #+
 #scale_y_continuous(breaks=equal_breaks(n=10, s=0.1))
 
 ggsave("figures/updated/rest-spp.png",rest_biodiv_plot, width=8 , height = 3.2, dpi = 300)
@@ -897,6 +1065,78 @@ pareto_scenario_plot <- pareto_scenario |>
   labs(x = "mean habitat shortfall", y = "carbon shortfall")
 
 ggsave(filename = 'figures/updated/rest-scenario-pareto.png', plot = pareto_scenario_plot, width = 4, height = 4, dpi = 400)
+
+
+##################### all scenarios simple outcomes ##################
+full_ic <- rep_IC_formatted |> filter(scenario == "IC") |>
+  group_by(spp, target_met) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met_IC = ifelse(spp == "biodiv", yes/(yes+no), shortfall_perc)) |>
+           dplyr::select(-c(no, yes))
+
+## carbon percentage change
+c_perc <- rep |>
+  left_join(ic_join) |>
+  filter(spp == "carbon") |>
+  filter(rep_ic > 0) |>
+  mutate(rep_diff = (rep - rep_ic)/rep_ic) |>
+  group_by(spp, scenario, carbon_weight, country_contraint, future) |>
+  summarise(rep_diff = rep_diff*100) |>
+  arrange(-rep_diff)
+
+
+full_benefits <- rep_formatted |>
+  filter(country_contraint == "FLEX") |>
+  # group_by(speciesgroup, country_contraint, carbon_weight) |># |> mutate(nspp = n()) |> ungroup()|>
+  group_by(scenario, future, spp, target_met, carbon_weight) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met = yes/(yes+no)) |>
+  left_join(lj_biodiv_ic) |>
+  mutate(perc_met_rel = (perc_met - perc_met_IC)*100) |>
+  #mutate(country_contraint = ifelse(country_contraint == "EVEN", "I",
+  #  ifelse(country_contraint == "FLEX", "II", "III"))) |>
+  mutate(perc_met = round(perc_met*100,0))
+
+
+norest_burden <- rep_norest_formatted |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Vascular plants", "Non-vascular plants"), "Plants", speciesgroup)) |>
+  mutate(speciesgroup = ifelse(speciesgroup %in% c("Mammals", "Birds", "Plants", "Amphibians", "Reptiles"),speciesgroup, "Other")) |>
+  group_by(speciesgroup, target_met) |>
+  count() |> pivot_wider(names_from = target_met, values_from = n) |>
+  mutate(perc_met_norest = yes/(yes+no)) |> dplyr::select(-c(no, yes))
+lj_biodiv_ic$speciesgroup <- unique(burden_biodiv$speciesgroup)
+lj_biodiv_ic <- lj_biodiv_ic |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2020", ""))
+
+norest_burden$speciesgroup <- unique(burden_biodiv$speciesgroup)
+norest_burden <- norest_burden |>
+  mutate(label = ifelse(speciesgroup != "Plants\n n spp=140", "2030 no NRL", ""))
+
+# Box plot facetted
+rest_biodiv_plot <- ggboxplot(rest_biodiv, x = "scenario", y = "perc_met",
+                              color = "scenario",
+                              add = "jitter",
+                              facet.by = "speciesgroup", nrow = 1,
+                              short.panel.labs = TRUE) +
+  # stat_compare_means(aes(label = ..p.signif..))  +
+  theme_bw() +
+  geom_hline(data = lj_biodiv_ic,
+             aes(yintercept = perc_met_IC*100), color = "#2c456b", linetype = "dashed", lwd = 1) +
+  geom_text(data = lj_biodiv_ic, aes(x = 1.5, y = perc_met_IC*100, label = label),
+            color = "#2c456b", hjust = 1,vjust = -0.4, size = 3.5) +
+  geom_hline(data = norest_burden,
+             aes(yintercept = perc_met_norest*100), color = "#4779c4", linetype = "dotdash", lwd =1) +
+  geom_text(data = norest_burden, aes(x = 1.5, y = perc_met_norest*100, label = label),
+            color = "#4779c4", hjust = 0.4, vjust = 1.4, size = 3.5) +
+  scale_color_manual(values = c( "grey", "grey2", "darkred")) +
+  ylim(0,62) +
+  theme(legend.position = "none") +
+  labs(x = "", y = "percent of species targets met \n relative to initial conditions") +
+  theme(axis.text.x = element_text(size = 12)) #+
+#scale_y_continuous(breaks=equal_breaks(n=10, s=0.1))
+
+ggsave("figures/updated/rest-spp.png",rest_biodiv_plot, width=8 , height = 3.2, dpi = 300)
+
 
 ############## bioregion #######################
 # fig4E_legend <- plotting_data |> filter(carbon == "0.3",
@@ -1088,9 +1328,11 @@ ggsave(filename = 'figures/updated/rest-scenario-pareto.png', plot = pareto_scen
 # ggsave("figures/updated/fig2c.png", fig2c, width = 3, height = 3, dpi = 300)
 
 
-##################### SI restoration only ########################
+##################### restoration only ########################
 colors <- c("grey", met.brewer(name="VanGogh3",n=20,type="continuous"))
 
+#### A - overestimating potential
+#### B - even not overestimating potential
 solution <- read_csv("data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_Baseline_proportional_gurobi_f455.csv") |>
   dplyr::select(id, solution_1_z1:solution_1_z26)
 colnames(solution) <- c("id", (zone_id$zone))
@@ -1106,8 +1348,6 @@ solution_table_plot <- solution_table |>
   mutate(zone = name) |>
   separate(name, c('maes_label', 'intensity', 'action'), sep = "_")
 
-#+ coord_flip()
-
 solution_raster <- fasterize(st_as_sf(solution_table_plot), raster(PU_plot), field = "value", by = "zone")
 solution_raster <- rast(solution_raster)
 names(solution_raster)
@@ -1115,10 +1355,6 @@ names(solution_raster)
 restore <- c(1,2,6,3,4,5,7,8,9,10)
 
 rest_agg <- app(solution_raster[[restore]], sum)
-
-png("figures/updated/rest_agg2.png", width = 5, height = 5, units = "in", res = 400)
-plot(rest_agg, col = colors)
-dev.off()
 
 solution_niave <- read_csv("data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_TRUE_scenario_Baseline_onlyrest_highs_f455.csv")|>
   dplyr::select(id, solution_1_z1:solution_1_z26)
@@ -1157,52 +1393,165 @@ rest_bar_coord <- as_tibble(solution_table_plot) |>
 bar_rest_SI <- rest_bar_coord |> dplyr::select(name, area, area_naive) |>
   rename(area_joint = area) |>
   pivot_longer(cols = c("area_joint", "area_naive"), names_to = "scenario") |>
-  ggplot(aes(x = reorder(name, -value), y = value/10, fill = scenario)) + geom_bar(position = "dodge", stat="identity", width = 0.6) +
+  ggplot(aes(x = reorder(name, -value), y = value/10, fill = scenario)) +
+  geom_bar(stat="identity", width = 0.5, position = position_dodge(width = 0.6)) +
   theme_classic() +
-  labs(x = element_blank(), y = "area (1000 km^2)") +
+  ylim(0,350) +
+  labs(x = element_blank(), y =  expression("area (1000 km"^2*")")) +
   theme(legend.position = c(0.8,0.8),
         legend.title = element_blank(),
-        axis.text.x = element_text(size = 8, angle = 45, hjust =1)) +
+        axis.text = element_text(size = 9, hjust =1)) + coord_flip() +
   scale_fill_manual(values = c(met.brewer(name="Kandinsky",n=4,type="continuous"))[c(1,3,2)])
 
-ggsave("figures/updated/bar_rest_SI.png", bar_rest_SI, width = 4, height = 4, dpi = 300)
+ggsave("figures/updated/bar_rest_SI_A.png", bar_rest_SI, width = 3.5, height = 3.5, dpi = 300)
 
 solution_raster_n <- fasterize(st_as_sf(solution_table_plot_n), raster(PU_plot), field = "value", by = "zone")
 solution_raster_n <- rast(solution_raster_n)
 
-
 rest_agg_naive <- app(solution_raster_n[[restore]], sum)
-png("figures/updated/rest_agg_naive.png", width = 5, height = 5, units = "in", res = 400)
-plot(rest_agg_naive, col = colors)
-dev.off()
-
-
 rst_diff = rest_agg_naive - rest_agg
 plot(rst_diff)
 
 cellStats(raster(abs(rst_diff)), "sum")/cellStats(raster(abs(rest_agg)), "sum")
 
-rst_diff_plot <- ggR(rst_diff, layer = 1, maxpixels = 1e10,forceCat = FALSE,
-                  geom_raster = TRUE, coord_equal = TRUE,stretch = "none", ggObj = TRUE) +
-  ggthemes::theme_map(base_size = 11,base_family = 'Arial') +
-  scale_fill_scico(direction = 1,palette = "vik",midpoint = 0, na.value = '#FFFFFF',
-                   guide = guide_colorbar(title = "Difference",ticks = FALSE) ) +
-  theme(legend.position = c(.05,.15),legend.background = element_rect(fill = 'transparent'),
-        plot.title = element_text(size = 23, hjust = .5),plot.subtitle = element_text(hjust = .5)) +
+rst_diff_plot <- ggR(rst_diff*100, layer = 1, maxpixels = 1e10, forceCat = FALSE,
+                     geom_raster = TRUE, coord_equal = TRUE, stretch = "none", ggObj = TRUE) +
+  ggthemes::theme_map(base_size = 11, base_family = 'Arial') +
+  scale_fill_scico(direction = 1, palette = "vik",
+                   midpoint = 0, limits = c(-100, 100),  # Set limits from -1 to 1
+                   na.value = '#FFFFFF',
+                   guide = guide_colorbar(title = "Difference", ticks = FALSE)) +
+  theme(
+    legend.text = element_text(size = 8),
+    legend.position = "bottom",  # Move legend to the bottom
+    legend.direction = "horizontal",  # Arrange legend items horizontally
+    legend.title = element_blank(),  # Center the legend title
+    legend.background = element_rect(fill = 'transparent'),
+    plot.title = element_text(size = 23, hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
   labs(x = "", y = "")
 
-ggsave(filename = 'figures/updated/rst_diff_plot.png', plot = rst_diff_plot, width = 5, height = 4, dpi = 400)
-
-colors <- c("grey", met.brewer(name="VanGogh3",n=20,type="continuous"))
-myPal <- colors
-myTheme <- rasterTheme(region = myPal)
-
-png("figures/updated/rest_agg.png", width = 5, height = 5, units = "in", res = 400)
-plot(rest_agg, col = colors)
-dev.off()
+ggsave(filename = 'figures/updated/rst_diff_plot_A.png', plot = rst_diff_plot, width = 6, height = 4, dpi = 400)
 
 
-## land cover figure
+
+#### B - even not overestimating potential
+solution <- read_csv("data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_UNEVEN_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_f455.csv") |>
+  dplyr::select(id, solution_1_z1:solution_1_z26)
+colnames(solution) <- c("id", (zone_id$zone))
+
+solution_table <- pu_in_EU |> rename(id = pu) |> #plot_data |>
+  left_join(PU_template) |>
+  dplyr::select(-id) |>
+  rename(id = EU_id) |>
+  left_join(solution) |>
+  pivot_longer(-c(nuts2id:geometry))
+
+solution_table_plot <- solution_table |>
+  mutate(zone = name) |>
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_")
+
+solution_raster <- fasterize(st_as_sf(solution_table_plot), raster(PU_plot), field = "value", by = "zone")
+solution_raster <- rast(solution_raster)
+names(solution_raster)
+
+restore <- c(1,2,6,3,4,5,7,8,9,10)
+
+rest_agg <- app(solution_raster[[restore]], sum)
+
+solution_niave <- read_csv("data/solutions/sol/SI-sol/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_UNEVEN_wetlands_TRUE_onlyrestoration_TRUE_scenario_HN_onlyrest_highs_f455.csv")|>
+  dplyr::select(id, solution_1_z1:solution_1_z26)
+colnames(solution_niave) <- c("id", (zone_id$zone))
+
+solution_table_niave <- pu_in_EU |> rename(id = pu) |> #plot_data |>
+  left_join(PU_template) |>
+  dplyr::select(-id) |>
+  rename(id = EU_id) |>
+  left_join(solution_niave) |>
+  pivot_longer(-c(nuts2id:geometry))
+
+solution_table_plot_n <- solution_table_niave |>
+  mutate(zone = name) |>
+  separate(name, c('maes_label', 'intensity', 'action'), sep = "_")
+
+rest_bar_niave <- as_tibble(solution_table_plot_n) |>
+  group_by(zone, maes_label, intensity, action) |>
+  summarise(area_naive = sum(value, na.rm = TRUE)) |>
+  mutate(action = ifelse(action == "lockin", "production", action)) |>
+  ungroup() |> #filter(area >0) |>
+  mutate(intensity = ifelse(intensity == "primary", "natural", intensity)) |>
+  mutate(name = paste0(maes_label, " \n (", intensity, ")")) |>
+  filter(action == "restore")
+
+rest_bar_coord <- as_tibble(solution_table_plot) |>
+  group_by(zone, maes_label, intensity, action) |>
+  summarise(area = sum(value)) |>
+  mutate(action = ifelse(action == "lockin", "production", action)) |>
+  ungroup() |> filter(area >0) |>
+  mutate(intensity = ifelse(intensity == "primary", "natural", intensity)) |>
+  mutate(name = paste0(maes_label, " \n (", intensity, ")")) |>
+  filter(action == "restore") |>
+  left_join(rest_bar_niave)
+
+rest_bar_coord$name <- factor(rest_bar_coord$name,
+                              levels = rev(c("Grassland \n (natural)",
+                                             "HeathlandShrub \n (natural)",
+                                             "WoodlandForest \n (natural)",
+                                             "SparseVeg \n (natural)",
+                                             "Wetlands \n (natural)",
+                                             "Pasture \n (low)",
+                                             "Cropland \n (med)",
+                                             "Cropland \n (low)",
+                                             "WoodlandForest \n (multi)")))
+
+
+bar_rest_SI <- rest_bar_coord |> dplyr::select(name, area, area_naive) |>
+  rename(area_joint = area) |>
+  pivot_longer(cols = c("area_joint", "area_naive"), names_to = "scenario") |>
+  ggplot(aes(x = name, y = value/10, fill = scenario)) +
+  geom_bar(stat="identity", width = 0.5, position = position_dodge(width = 0.6)) +
+  theme_classic() +
+  ylim(0,350) +
+  labs(x = element_blank(), y =  expression("area (1000 km"^2*")")) +
+  theme(legend.position = c(0.8,0.8),
+        legend.title = element_blank(),
+        axis.text = element_text(size = 9, hjust =1)) + coord_flip() +
+  scale_fill_manual(values = c(met.brewer(name="Kandinsky",n=4,type="continuous"))[c(1,3,2)])
+
+ggsave("figures/updated/bar_rest_SI_B.png", bar_rest_SI, width = 3.5, height = 3.5, dpi = 300)
+
+solution_raster_n <- fasterize(st_as_sf(solution_table_plot_n), raster(PU_plot), field = "value", by = "zone")
+solution_raster_n <- rast(solution_raster_n)
+
+rest_agg_naive <- app(solution_raster_n[[restore]], sum)
+rst_diff = rest_agg_naive - rest_agg
+plot(rst_diff)
+
+cellStats(raster(abs(rst_diff)), "sum")/cellStats(raster(abs(rest_agg)), "sum")
+
+rst_diff_plot <- ggR(rst_diff*100, layer = 1, maxpixels = 1e10, forceCat = FALSE,
+                     geom_raster = TRUE, coord_equal = TRUE, stretch = "none", ggObj = TRUE) +
+  ggthemes::theme_map(base_size = 11, base_family = 'Arial') +
+  scale_fill_scico(direction = 1, palette = "vik",
+                   midpoint = 0, limits = c(-100, 100),  # Set limits from -1 to 1
+                   na.value = '#FFFFFF',
+                   guide = guide_colorbar(title = "Difference", ticks = FALSE)) +
+  theme(
+    legend.text = element_text(size = 8),
+    legend.position = "bottom",  # Move legend to the bottom
+    legend.direction = "horizontal",  # Arrange legend items horizontally
+    legend.title = element_blank(),  # Center the legend title
+    legend.background = element_rect(fill = 'transparent'),
+    plot.title = element_text(size = 23, hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  labs(x = "", y = "")
+
+ggsave(filename = 'figures/updated/rst_diff_plot_B.png', plot = rst_diff_plot, width = 6, height = 4, dpi = 400)
+
+
+############### land cover figure #############################
 nuts2 <- st_read("data/EU_NUTS2_GLOBIOM/EU_GLOBIOM_NUTS2.shp") |>
   rename(NUTS_ID = NURGCDL2) |>
   mutate(nuts2id = seq(1:260)) |>
@@ -1224,52 +1573,17 @@ write_fst(plotting_data_ic, "data/plotting/plotting_data_ic.fst")
 
 ##### land use change figure
 plotting_data_ic <- read_fst("data/plotting/plotting_data_ic.fst")
-pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
-  rename(id = pu)
-filelist_temp <- "data/solutions/sol/NUTSadj/sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv"
-nm <- "sol_carbon_0.5_restoration_0.141_production_NUTS2adj_country_FLEX_wetlands_TRUE_onlyrestoration_FALSE_scenario_HN_proportional_gurobi_ref.csv"
-carbon <- str_split(nm, "_")[[1]][3]
-country_TF <- str_split(nm, "_")[[1]][9]
-scenario <- str_split(nm, "_")[[1]][15]
-future <- str_split(nm, "_")[[1]][18]
-solution <- read_csv(filelist_temp[[i]]) |>
-  dplyr::select(id, solution_1_z1:solution_1_z26)
-zone_id <- read_csv("data/formatted-data/zone_id.csv")
 
-colnames(solution) <- c("id", (zone_id$zone))
-
-solution_table <- pu_in_EU |>
-  rename(id = pu) |>
-  dplyr::select(-id) |>
-  rename(id = EU_id) |> drop_na() |>
-  left_join(solution, by = "id") |>
-  pivot_longer(-c(nuts2id:id)) |>
-  left_join(pu_adjustment) |>
-  mutate(value = ifelse(name == "RiversLakes_natural_conserve", value-diff, value))
-
-nuts2_area <- solution_table |>
-  dplyr::select(nuts2id, id) |> unique() |>
-  group_by(nuts2id) |>
-  count()
-
-solution_table_plot <- solution_table |>
-  mutate(zone = name) |>
-  separate(name, c('maes_label', 'intensity', 'action'), sep = "_") |>
-  mutate(carbon = carbon,
-         country_TF = country_TF,
-         scenario = scenario,
-         future = future)
+solution_table_plot <- plotting_data |>
+  filter(carbon == "0.5",
+         country_TF == "FLEX")
 
 LC_change_fig_sol <- solution_table_plot |>
   mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
                             ifelse(intensity %in% c("high", "prod"), "high",
                                    ifelse(intensity %in% c("primary", "natural"),
                                           "natural",intensity)))) |>
-  group_by(nuts2id, intensity) |> summarise(value_sol = sum(value,na.rm = T))
-
-
-plotting_data_ic |> filter(maes_label == "RiversLakes")
-solution_table |> filter(name == "RiversLakes_natural_conserve")
+  group_by(nuts2id, intensity, future, scenario) |> summarise(value_sol = sum(value,na.rm = T))
 
 LC_change_fig_ic <- plotting_data_ic |>
   mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
@@ -1278,40 +1592,147 @@ LC_change_fig_ic <- plotting_data_ic |>
                                           "natural",intensity)))) |>
   group_by(nuts2id, intensity) |> summarise(value_ic = sum(value,na.rm = T))
 
-LC_change_fig <- LC_change_fig_sol |> full_join(LC_change_fig_ic) |>
+LC_change_fig <- LC_change_fig_sol |>
+  left_join(LC_change_fig_ic) |>
   mutate(delta = value_sol-value_ic) |>
   left_join(nuts2_area) |>
   mutate(delta = delta/n)
 
 sum(LC_change_fig$value_sol)/41046
 
-LC_change_plot <- LC_change_fig |> left_join(nuts2) |> #filter(intensity == "high") |>
-  #filter(intensity == "high")|>
-  ggplot() + geom_sf(aes(fill = delta, geometry = geometry)) + theme_classic() +
-  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
-  facet_wrap(~intensity, nrow = 1)
+library(scico)  # Load the scico package for the "vik" palette
 
-ggsave("figures/lc_change.png", LC_change_plot)
+LC_change_plot_f455_bn <- LC_change_fig |>
+  left_join(nuts2) |>
+  filter(
+    scenario == "HN",
+    intensity != "urban"
+  ) |>
+  ggplot() +
+  geom_sf(aes(fill = delta, geometry = geometry)) +
+  theme_classic() +
+  scale_fill_scico(
+    direction = 1,
+    palette = "vik",
+    midpoint = 0,
+    na.value = '#FFFFFF',
+    name = "solution - initial conditions \n (% of total land area)"  # Label the legend
+  ) +
+  facet_grid(
+    rows = vars(intensity),
+    cols = vars(future),
+    labeller = labeller(future = c("f455.csv" = "F455", "ref.csv" = "BAU"))  # Customize column labels
+  ) +
+  theme(
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.line = element_blank(),
+    strip.text = element_text(size = 11),
+    strip.background = element_rect(fill = "white", color = "black", size = 0.5),
+    legend.background = element_rect(fill = "white", color = "black", size = 0.5, linetype = "solid"),  # Box around the legend
+    legend.title = element_text(size = 10),  # Bold the legend title
+    legend.position = "bottom"  # Position the legend on the right
+  )
+
+LC_change_plot_f455_bn
+
+ggsave("figures/updated/lc_change.png", LC_change_plot_f455_bn, width = 4, height = 6, dpi = 300)
 
 LC_change_bar <- solution_table_plot |>
-  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
-                            ifelse(intensity %in% c("high", "prod"), "high",
-                                   ifelse(intensity %in% c("primary", "natural"),
-                                          "natural",intensity)))) |>
-  group_by(maes_label, intensity) |> summarise(value_sol = sum(value,na.rm = T))
+  group_by(maes_label, intensity, future, scenario) |>
+  summarise(value_sol = sum(value,na.rm = T))
 
 LC_change_fig_ic <- plotting_data_ic |>
-  mutate(intensity = ifelse(intensity %in% c("low", "med", "multi"),"low",
-                            ifelse(intensity %in% c("high", "prod"), "high",
-                                   ifelse(intensity %in% c("primary", "natural"),
-                                          "natural",intensity)))) |>
   group_by(maes_label, intensity) |> summarise(value_ic = sum(value,na.rm = T))
 
-test <- LC_change_fig_ic |> full_join(LC_change_bar) |>
+unique(LC_change_bar_plot$lc)
+LC_change_bar_plot <- LC_change_bar |>
+  left_join(LC_change_fig_ic) |>
+  mutate(diff = value_sol - value_ic) |>
+  filter(intensity != "natural") |>
+  filter(intensity != "primary") |>
+  filter(intensity != "urban") |>
+  filter(scenario == "Baseline") |>
+  mutate(lc = paste0(maes_label, "\n", intensity)) |>
+  mutate(lc = case_when(
+    lc ==  "WoodlandForest\nprod" ~ "Forest \n production",
+    lc == "WoodlandForest\nmulti" ~ "Forest \n multifunctional",
+    lc == "Pasture\nlow" ~ "Pasture \n low-intensity",
+    lc == "Pasture\nhigh" ~ "Pasture \n high-intensity",
+    lc == "Cropland\nmed" ~ "Cropland \n mid-intensity",
+    lc == "Cropland\nlow" ~ "Cropland \n low-intensity",
+    lc == "Cropland\nhigh" ~ "Cropland \n high-intensity",
+    TRUE ~ "F"
+  )) |>
+  arrange(lc) |>
+  mutate(diff_perc = diff / 41046 * 100) |>
+  mutate(future = ifelse(future == "f455.csv","F455", "BAU")) |>  # Customize column labels
+  filter(intensity != "urban",
+         maes_label != "RiversLakes",
+         maes_label != "MarineTransitional") |>
+  ggplot(aes(x = diff_perc, y = lc, fill = future)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_alpha_manual(values = c(0.6, 1)) +  # Set alpha values manually
+  labs(
+    x =  "% change from 2020 conditions \n  (% of total land area)",
+    y = "Land Cover Type",
+    fill = "Production \n Scenario",
+    alpha = "NRL \n Scenario",
+    title = "Comparison of Land Cover Changes"
+  ) +
+  theme_bw(base_size = 10) +  # Adjust base font size for readability
+  theme(
+    axis.title.y = element_blank(),  # Remove y-axis title
+    legend.position = c(0.95, 0.4),  # Position the legend inside the plot area
+    legend.justification = c(1, 1),  # Justify the legend in the top-right corner
+    legend.background = element_rect(fill = "white", color = "black", size = 0.5, linetype = "solid"),  # Add a white background with a black border to the legend
+    #legend.title = element_blank(),  # Remove the legend title
+    plot.title = element_blank()  # Center and bold the title
+  ) + geom_vline(aes(xintercept = 0), linetype = "dashed") +
+  #facet_grid(rows = vars(intensity), scales = "free", space = "free")  +
+  theme(
+    axis.text = element_text(size = 9.5),
+    strip.text = element_text(size = 11),
+    strip.background = element_rect(fill = "white", color = "black", size = 0.5),
+  ) + xlim(-3, 10)
+# Allow facets to have different sizes
+
+ggsave("figures/updated/lc_change_bar.png", LC_change_bar_plot, width = 3, height = 4, dpi = 300)
+
+
+LC_change_bar_plot <- LC_change_bar |>
+  filter(scenario == "Baseline") |>
+  left_join(LC_change_fig_ic) |>
   mutate(diff = value_sol - value_ic) |>
   mutate(lc = paste0(maes_label, intensity)) |>
   arrange(-diff) |>
-  mutate(diff_perc = diff/41046*100) |>
-  ggplot() + geom_col(aes(x = diff_perc, y = fct_reorder(lc, diff))) +
-  theme_classic() +
+  mutate(diff_perc = diff / 41046 * 100) |>
+  mutate(future = ifelse(future == "f455.csv","F455", "BAU")) |>  # Customize column labels
+  filter(intensity != "urban",
+         maes_label != "RiversLakes",
+         maes_label != "MarineTransitional") |>
+  ggplot(aes(x = diff_perc, y = fct_reorder(maes_label, diff), fill = future)) +
+  geom_col(position = "dodge", width = 0.7) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_alpha_manual(values = c(0.6, 1)) +  # Set alpha values manually
+  labs(
+    x =  "change from 2020 initial conditions \n  (% of total land area)",
+    y = "Land Cover Type",
+    fill = "Production \n Scenario",
+    alpha = "NRL \n Scenario",
+    title = "Comparison of Land Cover Changes"
+  ) +
+  theme_classic(base_size = 10) +  # Adjust base font size for readability
+  theme(
+    axis.title.y = element_blank(),  # Remove y-axis title
+    legend.position = c(0.95, 0.4),  # Position the legend inside the plot area
+    legend.justification = c(1, 1),  # Justify the legend in the top-right corner
+    legend.background = element_rect(fill = "white", color = "black", size = 0.5, linetype = "solid"),  # Add a white background with a black border to the legend
+    #legend.title = element_blank(),  # Remove the legend title
+    plot.title = element_blank()  # Center and bold the title
+  )
+
+ggsave("figures/updated/lc_change_bar_main.png", LC_change_bar_plot, width = 4, height = 6, dpi = 300)
 

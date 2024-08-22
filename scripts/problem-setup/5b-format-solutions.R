@@ -298,3 +298,62 @@ plotting_data <- bind_rows(plot_table)
 write_fst(plotting_data, "data/plotting/plotting_data_ref_f455.fst")
 
 
+################# SI shortfalls ###############
+#################
+#################
+## Calculate representation and save
+
+filelist_temp <- c("data/solutions/sol/SI-sol/sol_carbon_2_restoration_0.02_production_NUTS2adj_country_UNEVEN_wetlands_FALSE_onlyrestoration_FALSE_scenario_NA_norest_gurobi_f455.csv",
+                                           "data/solutions/sol/SI-sol/sol_carbon_2_restoration_0.02_production_NUTS2adj_country_UNEVEN_wetlands_FALSE_onlyrestoration_FALSE_scenario_NA_norest_gurobi_ref.csv")
+shortfalls <- list()
+i=1
+# to subtract out the areas that don't have IC data
+pu_adjustment <- read_csv("data/formatted-data/pu_adjustment.csv") |>
+  rename(id = pu)
+
+#  join targets and spp info
+for (i in 1:length(filelist_temp)) {
+  filenm <- unlist(strsplit(filelist_temp[[i]], "_"))
+  carbon_weight <- filenm[[3]]
+  country_contraint <- filenm[[9]]
+  scenario <- filenm[[15]]
+  future <- str_sub(filenm[[18]], 1,-5)
+
+  solution <- read_csv(filelist_temp[[i]])
+
+  solution <- solution |>
+    rowid_to_column("pu") |>
+    dplyr::select(pu, solution_1_z1:solution_1_z26) |>
+    pivot_longer(-pu) |>
+    mutate(zone = str_sub(name, 13)) |>
+    dplyr::select(-name) |>
+    mutate(zone = as.numeric(zone)) |>
+    left_join(pu_adjustment |> rename(pu = id)) |>
+    mutate(value = ifelse(zone == 23, value-diff, value)) |>
+    dplyr::select(-diff)
+
+  rij_sol <- rij |>
+    left_join(solution, by = c("pu", "zone"))
+
+  contribution <- rij_sol |>
+    mutate(contribution = amount*value) |>
+    group_by(species) |>
+    summarise(rep = sum(contribution))|>
+    left_join(targets) |>
+    mutate(shortfall = rep-target) |>
+    mutate(shortfall_perc = shortfall/target) |>
+    mutate(carbon_weight = carbon_weight,
+           scenario = scenario,
+           country_contraint = country_contraint,
+           future = future) |>
+    mutate(target_met = ifelse(shortfall<0,"no", "yes")) |>
+    mutate(spp = ifelse(species != 999999, "biodiv", "carbon"))
+
+  shortfalls[[i]] <- contribution
+}
+
+
+shortfalls <- bind_rows(shortfalls, .id = "column_label")
+
+
+write_fst(shortfalls, "data/solutions/representation_norest.fst", compress = 80)
